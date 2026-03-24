@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "skills": {
+    "chatbot-analytics": {
+      "source": "erichowens/some_claude_skills",
+      "sourceType": "github",
+      "computedHash": "fab98759771740528d04d468839187889d3a638c5dec9e6887ef5b9eebfae2ba"
+    },
+    "frontend-design": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "516bd2154eb843a8240e43d5b285229129853114ad7075a5e141e1c08e408c84"
+    },
+    "whatsapp-cloud-api": {
+      "source": "bellopushon/whatsapp-cloud-api",
+      "sourceType": "github",
+      "computedHash": "ede0274890801c402b4b358ba639a819eb41bb9d234c6289fbeace758b32fffc"
+    }
+  }
+}
