@@ -28,15 +28,23 @@ export async function GET(
     }
 
     const phone = clientDoc.data()?.phone
+    
+    // Query documents without orderBy to avoid index requirement
     const snapshot = await db.collection('documents')
       .where('phone', '==', phone)
-      .orderBy('uploadedAt', 'desc')
       .get()
 
     const documents = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }))
+    
+    // Sort in memory by uploadedAt descending
+    documents.sort((a: any, b: any) => {
+      const dateA = new Date(a.uploadedAt || 0).getTime()
+      const dateB = new Date(b.uploadedAt || 0).getTime()
+      return dateB - dateA
+    })
 
     return NextResponse.json(documents)
   } catch (error) {
