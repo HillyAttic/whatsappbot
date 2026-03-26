@@ -144,3 +144,64 @@ export const fileStorage = {
     return path.join(STORAGE_DIR, filePath)
   },
 }
+
+// Helper functions for webhook
+export function getAllClients(): Client[] {
+  return clients
+}
+
+export function parseWebhookPayload(body: any): { from: string; text: string } | null {
+  try {
+    const entry = body?.entry?.[0]
+    const change = entry?.changes?.[0]
+    const message = change?.value?.messages?.[0]
+
+    if (!message || message.type !== 'text') {
+      return null
+    }
+
+    return {
+      from: message.from,
+      text: message.text.body,
+    }
+  } catch {
+    return null
+  }
+}
+
+export function sanitizeMessageBody(text: string): string {
+  return text.trim()
+}
+
+export async function findUser(phone: string): Promise<Client | null> {
+  return clients.find(c => c.phone === phone) || null
+}
+
+export async function getDocuments(phone: string): Promise<Document[]> {
+  return documents.filter(d => d.phone === phone)
+}
+
+// Session storage for document selection
+const sessions = new Map<string, Document[]>()
+
+export function storeSession(phone: string, docs: Document[]): void {
+  sessions.set(phone, docs)
+}
+
+export function getSession(phone: string): Document[] | null {
+  return sessions.get(phone) || null
+}
+
+export async function generateSignedUrl(filePath: string): Promise<string> {
+  // In production, generate a signed URL with expiration
+  // For now, return a simple URL path
+  const fullPath = fileStorage.getFullPath(filePath)
+  
+  if (!fs.existsSync(fullPath)) {
+    throw new Error('File not found')
+  }
+  
+  // Return a URL that can be used to download the file
+  // In production, this should be a proper signed URL
+  return `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/files/${encodeURIComponent(filePath)}`
+}

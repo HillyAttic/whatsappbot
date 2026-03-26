@@ -53,23 +53,14 @@ export async function GET() {
     }
   }
 
-  // 3. Try initializing Firebase
+  // 3. Check simple storage
   try {
-    const { getFirestore } = await import('@/lib/firebase-admin')
-    const db = getFirestore()
-    diagnostics.firestoreInit = 'SUCCESS'
-
-    // 4. Try a simple read
-    try {
-      const snapshot = await db.collection('users').limit(1).get()
-      diagnostics.firestoreRead = 'SUCCESS'
-      diagnostics.sampleDocCount = snapshot.size
-    } catch (readError) {
-      diagnostics.firestoreRead = 'FAILED'
-      diagnostics.readError = readError instanceof Error ? readError.message : String(readError)
-    }
+    const { getAllClients } = await import('@/lib/simple-storage')
+    const clients = getAllClients()
+    diagnostics.storageInit = 'SUCCESS'
+    diagnostics.clientCount = clients.length
   } catch (initError) {
-    diagnostics.firestoreInit = 'FAILED'
+    diagnostics.storageInit = 'FAILED'
     diagnostics.initError = initError instanceof Error ? initError.message : String(initError)
     diagnostics.initErrorStack = initError instanceof Error ? initError.stack : undefined
   }
