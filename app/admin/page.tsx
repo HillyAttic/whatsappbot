@@ -1,0 +1,300 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+
+interface Client {
+  id: string
+  name: string
+  phone: string
+}
+
+interface Document {
+  id: string
+  title: string
+  filePath: string
+  uploadedAt: string
+}
+
+export default function AdminPage() {
+  const [clients, setClients] = useState<Client[]>([])
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null)
+  const [documents, setDocuments] = useState<Document[]>([])
+  const [loading, setLoading] = useState(false)
+  
+  // Client form
+  const [clientName, setClientName] = useState('')
+  const [clientPhone, setClientPhone] = useState('')
+  const [showClientForm, setShowClientForm] = useState(false)
+  
+  // Document form
+  const [docTitle, setDocTitle] = useState('')
+  const [docFile, setDocFile] = useState<File | null>(null)
+  const [showDocForm, setShowDocForm] = useState(false)
+  const [uploading, setUploading] = useState(false)
+
+  // Load clients
+  useEffect(() => {
+    loadClients()
+  }, [])
+
+  // Load documents when client is selected
+  useEffect(() => {
+    if (selectedClient) {
+      loadDocuments(selectedClient.id)
+    }
+  }, [selectedClient])
+
+  const loadClients = async () => {
+    try {
+      const res = await fetch('/api/admin/clients')
+      const data = await res.json()
+      setClients(data)
+    } catch (error) {
+      console.error('Error loading clients:', error)
+    }
+  }
+
+  const loadDocuments = async (clientId: string) => {
+    try {
+      setLoading(true)
+      const res = await fetch(`/api/admin/clients/${clientId}/documents`)
+      const data = await res.json()
+      setDocuments(data)
+    } catch (error) {
+      console.error('Error loading documents:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleAddClient = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      const res = await fetch('/api/admin/clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: clientName, phone: clientPhone })
+      })
+      if (res.ok) {
+        setClientName('')
+        setClientPhone('')
+        setShowClientForm(false)
+        loadClients()
+      }
+    } catch (error) {
+      console.error('Error adding client:', error)
+    }
+  }
+
+  const handleDeleteClient = async (id: string) => {
+    if (!confirm('Delete this client?')) return
+    try {
+      await fetch(`/api/admin/clients/${id}`, { method: 'DELETE' })
+      if (selectedClient?.id === id) {
+        setSelectedClient(null)
+        setDocuments([])
+      }
+      loadClients()
+    } catch (error) {
+      console.error('Error deleting client:', error)
+    }
+  }
+
+  const handleAddDocument = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedClient || !docFile) return
+    
+    try {
+      setUploading(true)
+      const formData = new FormData()
+      formData.append('title', docTitle)
+      formData.append('file', docFile)
+      
+      const res = await fetch(`/api/admin/clients/${selectedClient.id}/documents`, {
+        method: 'POST',
+        body: formData
+      })
+      
+      if (res.ok) {
+        setDocTitle('')
+        setDocFile(null)
+        setShowDocForm(false)
+        loadDocuments(selectedClient.id)
+      }
+    } catch (error) {
+      console.error('Error adding document:', error)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleDeleteDocument = async (docId: string) => {
+    if (!selectedClient || !confirm('Delete this document?')) return
+    try {
+      await fetch(`/api/admin/clients/${selectedClient.id}/documents/${docId}`, {
+        method: 'DELETE'
+      })
+      loadDocuments(selectedClient.id)
+    } catch (error) {
+      console.error('Error deleting document:', error)
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-8">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-3xl font-bold mb-8">WhatsApp Bot Admin</h1>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Clients Section */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">Clients</h2>
+              <button
+                onClick={() => setShowClientForm(!showClientForm)}
+                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+              >
+                {showClientForm ? 'Cancel' : 'Add Client'}
+              </button>
+            </div>
+
+            {showClientForm && (
+              <form onSubmit={handleAddClient} className="mb-4 p-4 bg-gray-50 rounded">
+                <input
+                  type="text"
+                  placeholder="Name"
+                  value={clientName}
+                  onChange={(e) => setClientName(e.target.value)}
+                  className="w-full p-2 border rounded mb-2"
+                  required
+                />
+                <input
+                  type="tel"
+                  placeholder="Phone (e.g., +1234567890)"
+                  value={clientPhone}
+                  onChange={(e) => setClientPhone(e.target.value)}
+                  className="w-full p-2 border rounded mb-2"
+                  required
+                />
+                <button
+                  type="submit"
+                  className="w-full bg-green-500 text-white p-2 rounded hover:bg-green-600"
+                >
+                  Save Client
+                </button>
+              </form>
+            )}
+
+            <div className="space-y-2">
+              {clients.map((client) => (
+                <div
+                  key={client.id}
+                  className={`p-3 border rounded cursor-pointer hover:bg-gray-50 ${
+                    selectedClient?.id === client.id ? 'bg-blue-50 border-blue-500' : ''
+                  }`}
+                  onClick={() => setSelectedClient(client)}
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <div className="font-medium">{client.name}</div>
+                      <div className="text-sm text-gray-600">{client.phone}</div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDeleteClient(client.id)
+                      }}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {clients.length === 0 && (
+                <p className="text-gray-500 text-center py-4">No clients yet</p>
+              )}
+            </div>
+          </div>
+
+          {/* Documents Section */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">
+                Documents {selectedClient && `- ${selectedClient.name}`}
+              </h2>
+              {selectedClient && (
+                <button
+                  onClick={() => setShowDocForm(!showDocForm)}
+                  className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                >
+                  {showDocForm ? 'Cancel' : 'Add Document'}
+                </button>
+              )}
+            </div>
+
+            {!selectedClient && (
+              <p className="text-gray-500 text-center py-8">Select a client to view documents</p>
+            )}
+
+            {selectedClient && showDocForm && (
+              <form onSubmit={handleAddDocument} className="mb-4 p-4 bg-gray-50 rounded">
+                <input
+                  type="text"
+                  placeholder="Document Title"
+                  value={docTitle}
+                  onChange={(e) => setDocTitle(e.target.value)}
+                  className="w-full p-2 border rounded mb-2"
+                  required
+                />
+                <input
+                  type="file"
+                  onChange={(e) => setDocFile(e.target.files?.[0] || null)}
+                  className="w-full p-2 border rounded mb-2"
+                  required
+                />
+                <button
+                  type="submit"
+                  disabled={uploading}
+                  className="w-full bg-green-500 text-white p-2 rounded hover:bg-green-600 disabled:bg-gray-400"
+                >
+                  {uploading ? 'Uploading...' : 'Upload Document'}
+                </button>
+              </form>
+            )}
+
+            {selectedClient && loading && (
+              <p className="text-center py-4">Loading documents...</p>
+            )}
+
+            {selectedClient && !loading && (
+              <div className="space-y-2">
+                {documents.map((doc) => (
+                  <div key={doc.id} className="p-3 border rounded">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <div className="font-medium">{doc.title}</div>
+                        <div className="text-sm text-gray-600">
+                          {new Date(doc.uploadedAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteDocument(doc.id)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {documents.length === 0 && (
+                  <p className="text-gray-500 text-center py-4">No documents yet</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

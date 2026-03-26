@@ -1,6 +1,6 @@
 import admin from 'firebase-admin'
 
-let firebaseApp: admin.app.App | undefined
+let firebaseApp: admin.app.App | undefined | null
 
 /**
  * Initializes and returns a singleton Firebase Admin SDK instance.
@@ -8,6 +8,12 @@ let firebaseApp: admin.app.App | undefined
  */
 function initializeFirebase(): admin.app.App {
   if (firebaseApp) {
+    return firebaseApp
+  }
+
+  // Check if already initialized
+  if (admin.apps.length > 0) {
+    firebaseApp = admin.apps[0] as admin.app.App
     return firebaseApp
   }
 
