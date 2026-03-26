@@ -23,11 +23,44 @@ let documentIdCounter = 1
 
 // Storage directory for uploaded files
 const STORAGE_DIR = path.join(process.cwd(), 'storage')
+const DATA_FILE = path.join(process.cwd(), 'storage', 'data.json')
 
 // Ensure storage directory exists
 if (!fs.existsSync(STORAGE_DIR)) {
   fs.mkdirSync(STORAGE_DIR, { recursive: true })
 }
+
+// Load data from file
+function loadData() {
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'))
+      clients = data.clients || []
+      documents = data.documents || []
+      clientIdCounter = data.clientIdCounter || 1
+      documentIdCounter = data.documentIdCounter || 1
+    }
+  } catch (error) {
+    console.error('Error loading data:', error)
+  }
+}
+
+// Save data to file
+function saveData() {
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify({
+      clients,
+      documents,
+      clientIdCounter,
+      documentIdCounter,
+    }, null, 2))
+  } catch (error) {
+    console.error('Error saving data:', error)
+  }
+}
+
+// Initialize data
+loadData()
 
 // Client operations
 export const clientStorage = {

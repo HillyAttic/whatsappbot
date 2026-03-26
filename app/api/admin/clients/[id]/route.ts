@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { clientStorage, documentStorage, fileStorage } from '@/lib/simple-storage'
+import { getFirestore } from '@/lib/firebase-admin'
+import { deleteFile } from '@/lib/storage-service'
 import { normalizePhone } from '@/lib/phone'
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/auth-middleware'
+
+const db = getFirestore()
 
 /**
  * PUT /api/admin/clients/[id] - Update a client
@@ -27,19 +30,16 @@ export async function PUT(
     }
 
     const normalizedPhone = normalizePhone(phone)
-    const client = await clientStorage.update(params.id, {
+    await db.collection('users').doc(params.id).update({
       name,
       phone: normalizedPhone,
     })
 
-    if (!client) {
-      return NextResponse.json(
-        { error: 'Client not found' },
-        { status: 404 }
-      )
-    }
-
-    return NextResponse.json(client)
+    return NextResponse.json({
+      id: params.id,
+      name,
+      phone: normalizedPhone
+    })
   } catch (error) {
     console.error('Error updating client:', error)
     return NextResponse.json(
@@ -62,36 +62,37 @@ export async function DELETE(
   }
 
   try {
-    const client = await clientStorage.getById(params.id)
+    const clientDoc = await db.collection('users').doc(params.id).get()
 
-    if (!client) {
+    if (!clientDoc.exists) {
       return NextResponse.json(
         { error: 'Client not found' },
         { status: 404 }
       )
     }
 
-    const phone = client.phone
+    const phone = clientDoc.data()?.phone
 
     // Get all documents for this client
-    const docs = await documentStorage.getByPhone(phone)
+    const docsSnapshot = await db.collection('documents').where('phone', '==', phone).get()
 
-    // Delete files from storage
-    for (const doc of docs) {
-      if (doc.filePath) {
+    // Delete files from storage and documents
+    const deletePromises = docsSnapshot.docs.map(async (doc) => {
+      const data = doc.data()
+      if (data.filePath) {
         try {
-          await fileStorage.delete(doc.filePath)
+          await deleteFile(data.filePath)
         } catch (error) {
-          console.error(`Error deleting file ${doc.filePath}:`, error)
+          console.error(`Error deleting file ${data.filePath}:`, error)
         }
       }
-    }
+      await doc.ref.delete()
+    })
 
-    // Delete all documents
-    await documentStorage.deleteByPhone(phone)
+    await Promise.all(deletePromises)
 
     // Delete client
-    await clientStorage.delete(params.id)
+    await db.collection('users').doc(params.id).delete()
 
     return NextResponse.json({ success: true })
   } catch (error) {

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { documentStorage, fileStorage } from '@/lib/simple-storage'
+import { getFirestore } from '@/lib/firebase-admin'
+import { uploadFile, deleteFile } from '@/lib/storage-service'
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/auth-middleware'
+
+const db = getFirestore()
 
 /**
  * PUT /api/admin/clients/[id]/documents/[docId] - Update a document
@@ -15,16 +18,18 @@ export async function PUT(
   }
 
   try {
-    const document = await documentStorage.getById(params.docId)
+    const docRef = db.collection('documents').doc(params.docId)
+    const docSnap = await docRef.get()
 
-    if (!document) {
+    if (!docSnap.exists) {
       return NextResponse.json(
         { error: 'Document not found' },
         { status: 404 }
       )
     }
 
-    const phone = document.phone
+    const document = docSnap.data()
+    const phone = document?.phone
 
     // Parse multipart form data
     const formData = await req.formData()
@@ -38,17 +43,19 @@ export async function PUT(
       )
     }
 
-    let filePath = document.filePath
+    let filePath = document?.filePath
 
     // If a new file is provided, upload it and delete the old one
     if (file) {
       const fileBuffer = Buffer.from(await file.arrayBuffer())
-      const newFilePath = await fileStorage.upload(phone, fileBuffer, file.name)
+      const timestamp = Date.now()
+      const newFilePath = `documents/${phone}/${timestamp}_${file.name}`
+      await uploadFile(fileBuffer, newFilePath, file.type)
 
       // Delete old file
-      if (document.filePath) {
+      if (document?.filePath) {
         try {
-          await fileStorage.delete(document.filePath)
+          await deleteFile(document.filePath)
         } catch (error) {
           console.error('Error deleting old file:', error)
         }
@@ -58,12 +65,18 @@ export async function PUT(
     }
 
     // Update document
-    const updatedDoc = await documentStorage.update(params.docId, {
+    await docRef.update({
       title,
       filePath,
     })
 
-    return NextResponse.json(updatedDoc)
+    return NextResponse.json({
+      id: params.docId,
+      phone,
+      title,
+      filePath,
+      uploadedAt: document?.uploadedAt
+    })
   } catch (error) {
     console.error('Error updating document:', error)
     return NextResponse.json(
@@ -86,19 +99,22 @@ export async function DELETE(
   }
 
   try {
-    const document = await documentStorage.getById(params.docId)
+    const docRef = db.collection('documents').doc(params.docId)
+    const docSnap = await docRef.get()
 
-    if (!document) {
+    if (!docSnap.exists) {
       return NextResponse.json(
         { error: 'Document not found' },
         { status: 404 }
       )
     }
 
+    const document = docSnap.data()
+
     // Delete file from storage
-    if (document.filePath) {
+    if (document?.filePath) {
       try {
-        await fileStorage.delete(document.filePath)
+        await deleteFile(document.filePath)
       } catch (error) {
         console.error('Error deleting file:', error)
         return NextResponse.json(
@@ -109,7 +125,7 @@ export async function DELETE(
     }
 
     // Delete document
-    await documentStorage.delete(params.docId)
+    await docRef.delete()
 
     return NextResponse.json({ success: true })
   } catch (error) {

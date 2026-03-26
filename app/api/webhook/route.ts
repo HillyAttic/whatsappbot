@@ -7,10 +7,10 @@ import {
   getDocuments,
   storeSession,
   getSession,
-  generateSignedUrl,
-} from '@/lib/simple-storage'
+} from '@/lib/document-service'
 import { normalizePhone } from '@/lib/phone'
 import { sendMessage } from '@/lib/message-sender'
+import { generateSignedUrl } from '@/lib/storage-service'
 
 /**
  * GET handler for WhatsApp webhook verification challenge.

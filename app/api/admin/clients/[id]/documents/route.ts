@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { clientStorage, documentStorage, fileStorage } from '@/lib/simple-storage'
+import { getFirestore } from '@/lib/firebase-admin'
+import { uploadFile } from '@/lib/storage-service'
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/auth-middleware'
+
+const db = getFirestore()
 
 /**
  * GET /api/admin/clients/[id]/documents - List all documents for a client
@@ -15,17 +18,25 @@ export async function GET(
   }
 
   try {
-    const client = await clientStorage.getById(params.id)
+    const clientDoc = await db.collection('users').doc(params.id).get()
     
-    if (!client) {
+    if (!clientDoc.exists) {
       return NextResponse.json(
         { error: 'Client not found' },
         { status: 404 }
       )
     }
 
-    const phone = client.phone
-    const documents = await documentStorage.getByPhone(phone)
+    const phone = clientDoc.data()?.phone
+    const snapshot = await db.collection('documents')
+      .where('phone', '==', phone)
+      .orderBy('uploadedAt', 'desc')
+      .get()
+
+    const documents = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }))
 
     return NextResponse.json(documents)
   } catch (error) {
@@ -50,16 +61,16 @@ export async function POST(
   }
 
   try {
-    const client = await clientStorage.getById(params.id)
+    const clientDoc = await db.collection('users').doc(params.id).get()
     
-    if (!client) {
+    if (!clientDoc.exists) {
       return NextResponse.json(
         { error: 'Client not found' },
         { status: 404 }
       )
     }
 
-    const phone = client.phone
+    const phone = clientDoc.data()?.phone
 
     // Parse multipart form data
     const formData = await req.formData()
@@ -73,18 +84,27 @@ export async function POST(
       )
     }
 
-    // Upload file to storage
+    // Upload file to Firebase Storage
     const fileBuffer = Buffer.from(await file.arrayBuffer())
-    const filePath = await fileStorage.upload(phone, fileBuffer, file.name)
+    const timestamp = Date.now()
+    const filePath = `documents/${phone}/${timestamp}_${file.name}`
+    await uploadFile(fileBuffer, filePath, file.type)
 
-    // Create document
-    const document = await documentStorage.create({
+    // Create document in Firestore
+    const docRef = await db.collection('documents').add({
       phone,
       title,
       filePath,
+      uploadedAt: new Date().toISOString()
     })
 
-    return NextResponse.json(document, { status: 201 })
+    return NextResponse.json({
+      id: docRef.id,
+      phone,
+      title,
+      filePath,
+      uploadedAt: new Date().toISOString()
+    }, { status: 201 })
   } catch (error) {
     console.error('Error creating document:', error)
     return NextResponse.json(
