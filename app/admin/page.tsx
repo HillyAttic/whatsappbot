@@ -57,10 +57,20 @@ export default function AdminPage() {
           'Authorization': `Bearer ${token}`
         }
       })
+      
+      if (!res.ok) {
+        const errorData = await res.json()
+        console.error('Failed to load clients:', res.status, errorData)
+        alert(`Failed to load clients: ${errorData.error || 'Unknown error'}`)
+        return
+      }
+      
       const data = await res.json()
-      setClients(data)
+      console.log('Loaded clients:', data)
+      setClients(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Error loading clients:', error)
+      alert('Failed to load clients. Check console for details.')
     }
   }
 
@@ -94,14 +104,21 @@ export default function AdminPage() {
         },
         body: JSON.stringify({ name: clientName, phone: clientPhone })
       })
-      if (res.ok) {
-        setClientName('')
-        setClientPhone('')
-        setShowClientForm(false)
-        loadClients()
+      
+      if (!res.ok) {
+        const errorData = await res.json()
+        console.error('Failed to add client:', res.status, errorData)
+        alert(`Failed to add client: ${errorData.error || 'Unknown error'}`)
+        return
       }
+      
+      setClientName('')
+      setClientPhone('')
+      setShowClientForm(false)
+      loadClients()
     } catch (error) {
       console.error('Error adding client:', error)
+      alert('Failed to add client. Check console for details.')
     }
   }
 
