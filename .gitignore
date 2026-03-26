@@ -1,11 +1,60 @@
-.kiro
-.agents
-node_modules
+# Dependencies
+node_modules/
+/.pnp
+.pnp.js
+
+# Testing
+/coverage
+
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# Production
+/build
+
+# Misc
+.DS_Store
+*.pem
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local env files
 .env.local
-.env*.local
-.next
+.env.development.local
+.env.test.local
+.env.production.local
+*.env.local
 
-.vercel
+# Vercel
+.vercel/
 
-# Local Netlify folder
-.netlify
+# Netlify
+.netlify/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Kiro
+.kiro/
+.agents/
+.qoder/
+
+# Credentials and secrets
+ADMIN-CREDENTIALS.md
+_firebase_sa.txt
+_set_netlify_env.ps1
+*.key
+*.pem
+
+# Setup files (optional - remove if you want to track these)
+SETUP-ADMIN.md

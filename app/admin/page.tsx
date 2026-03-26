@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface Client {
   id: string
@@ -16,6 +17,7 @@ interface Document {
 }
 
 export default function AdminPage() {
+  const { user, signOut } = useAuth()
   const [clients, setClients] = useState<Client[]>([])
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [documents, setDocuments] = useState<Document[]>([])
@@ -44,9 +46,16 @@ export default function AdminPage() {
     }
   }, [selectedClient])
 
+  const { getToken } = useAuth()
+
   const loadClients = async () => {
     try {
-      const res = await fetch('/api/admin/clients')
+      const token = getToken()
+      const res = await fetch('/api/admin/clients', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
       const data = await res.json()
       setClients(data)
     } catch (error) {
@@ -57,7 +66,12 @@ export default function AdminPage() {
   const loadDocuments = async (clientId: string) => {
     try {
       setLoading(true)
-      const res = await fetch(`/api/admin/clients/${clientId}/documents`)
+      const token = getToken()
+      const res = await fetch(`/api/admin/clients/${clientId}/documents`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
       const data = await res.json()
       setDocuments(data)
     } catch (error) {
@@ -70,9 +84,13 @@ export default function AdminPage() {
   const handleAddClient = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
+      const token = getToken()
       const res = await fetch('/api/admin/clients', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ name: clientName, phone: clientPhone })
       })
       if (res.ok) {
@@ -89,7 +107,13 @@ export default function AdminPage() {
   const handleDeleteClient = async (id: string) => {
     if (!confirm('Delete this client?')) return
     try {
-      await fetch(`/api/admin/clients/${id}`, { method: 'DELETE' })
+      const token = getToken()
+      await fetch(`/api/admin/clients/${id}`, { 
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
       if (selectedClient?.id === id) {
         setSelectedClient(null)
         setDocuments([])
@@ -106,12 +130,16 @@ export default function AdminPage() {
     
     try {
       setUploading(true)
+      const token = getToken()
       const formData = new FormData()
       formData.append('title', docTitle)
       formData.append('file', docFile)
       
       const res = await fetch(`/api/admin/clients/${selectedClient.id}/documents`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
         body: formData
       })
       
@@ -131,8 +159,12 @@ export default function AdminPage() {
   const handleDeleteDocument = async (docId: string) => {
     if (!selectedClient || !confirm('Delete this document?')) return
     try {
+      const token = getToken()
       await fetch(`/api/admin/clients/${selectedClient.id}/documents/${docId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       })
       loadDocuments(selectedClient.id)
     } catch (error) {
@@ -143,7 +175,15 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8">WhatsApp Bot Admin</h1>
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold">WhatsApp Bot Admin</h1>
+          <button
+            onClick={() => signOut()}
+            className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
+          >
+            Sign Out
+          </button>
+        </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Clients Section */}

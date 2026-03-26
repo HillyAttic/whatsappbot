@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getFirestore } from '@/lib/firebase-admin'
-import { uploadFile, deleteFile } from '@/lib/storage-service'
+import { documentStorage, fileStorage } from '@/lib/simple-storage'
+import { verifyAdminToken, unauthorizedResponse } from '@/lib/auth-middleware'
 
 /**
  * PUT /api/admin/clients/[id]/documents/[docId] - Update a document
@@ -9,29 +9,22 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: { id: string; docId: string } }
 ) {
-  try {
-    const db = getFirestore()
-    
-    // Get the document
-    const docRef = db.collection('documents').doc(params.docId)
-    const docSnapshot = await docRef.get()
+  const auth = await verifyAdminToken(req)
+  if (!auth.authorized) {
+    return unauthorizedResponse(auth.error)
+  }
 
-    if (!docSnapshot.exists) {
+  try {
+    const document = await documentStorage.getById(params.docId)
+
+    if (!document) {
       return NextResponse.json(
         { error: 'Document not found' },
         { status: 404 }
       )
     }
 
-    const docData = docSnapshot.data()
-    const phone = docData?.phone
-
-    if (!phone) {
-      return NextResponse.json(
-        { error: 'Document phone not found' },
-        { status: 400 }
-      )
-    }
+    const phone = document.phone
 
     // Parse multipart form data
     const formData = await req.formData()
@@ -45,38 +38,32 @@ export async function PUT(
       )
     }
 
-    let filePath = docData.filePath
+    let filePath = document.filePath
 
     // If a new file is provided, upload it and delete the old one
     if (file) {
       const fileBuffer = Buffer.from(await file.arrayBuffer())
-      const newFilePath = await uploadFile(phone, fileBuffer, file.name)
+      const newFilePath = await fileStorage.upload(phone, fileBuffer, file.name)
 
       // Delete old file
-      if (docData.filePath) {
+      if (document.filePath) {
         try {
-          await deleteFile(docData.filePath)
+          await fileStorage.delete(document.filePath)
         } catch (error) {
           console.error('Error deleting old file:', error)
-          // Continue with update even if old file delete fails
         }
       }
 
       filePath = newFilePath
     }
 
-    // Update document in Firestore
-    await docRef.update({
+    // Update document
+    const updatedDoc = await documentStorage.update(params.docId, {
       title,
       filePath,
     })
 
-    const updatedDoc = await docRef.get()
-
-    return NextResponse.json({
-      id: updatedDoc.id,
-      ...updatedDoc.data(),
-    })
+    return NextResponse.json(updatedDoc)
   } catch (error) {
     console.error('Error updating document:', error)
     return NextResponse.json(
@@ -93,24 +80,25 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: { id: string; docId: string } }
 ) {
-  try {
-    const db = getFirestore()
-    const docRef = db.collection('documents').doc(params.docId)
-    const docSnapshot = await docRef.get()
+  const auth = await verifyAdminToken(req)
+  if (!auth.authorized) {
+    return unauthorizedResponse(auth.error)
+  }
 
-    if (!docSnapshot.exists) {
+  try {
+    const document = await documentStorage.getById(params.docId)
+
+    if (!document) {
       return NextResponse.json(
         { error: 'Document not found' },
         { status: 404 }
       )
     }
 
-    const docData = docSnapshot.data()
-
-    // Delete file from Storage first
-    if (docData?.filePath) {
+    // Delete file from storage
+    if (document.filePath) {
       try {
-        await deleteFile(docData.filePath)
+        await fileStorage.delete(document.filePath)
       } catch (error) {
         console.error('Error deleting file:', error)
         return NextResponse.json(
@@ -120,8 +108,8 @@ export async function DELETE(
       }
     }
 
-    // Delete document from Firestore
-    await docRef.delete()
+    // Delete document
+    await documentStorage.delete(params.docId)
 
     return NextResponse.json({ success: true })
   } catch (error) {

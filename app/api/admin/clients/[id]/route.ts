@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getFirestore } from '@/lib/firebase-admin'
+import { clientStorage, documentStorage, fileStorage } from '@/lib/simple-storage'
 import { normalizePhone } from '@/lib/phone'
-import { deleteFile } from '@/lib/storage-service'
+import { verifyAdminToken, unauthorizedResponse } from '@/lib/auth-middleware'
 
 /**
  * PUT /api/admin/clients/[id] - Update a client
@@ -10,6 +10,11 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const auth = await verifyAdminToken(req)
+  if (!auth.authorized) {
+    return unauthorizedResponse(auth.error)
+  }
+
   try {
     const body = await req.json()
     const { name, phone } = body
@@ -22,21 +27,19 @@ export async function PUT(
     }
 
     const normalizedPhone = normalizePhone(phone)
-
-    const db = getFirestore()
-    const docRef = db.collection('users').doc(params.id)
-
-    await docRef.update({
+    const client = await clientStorage.update(params.id, {
       name,
       phone: normalizedPhone,
     })
 
-    const doc = await docRef.get()
+    if (!client) {
+      return NextResponse.json(
+        { error: 'Client not found' },
+        { status: 404 }
+      )
+    }
 
-    return NextResponse.json({
-      id: doc.id,
-      ...doc.data(),
-    })
+    return NextResponse.json(client)
   } catch (error) {
     console.error('Error updating client:', error)
     return NextResponse.json(
@@ -53,57 +56,42 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  try {
-    const db = getFirestore()
-    const userRef = db.collection('users').doc(params.id)
-    const userDoc = await userRef.get()
+  const auth = await verifyAdminToken(req)
+  if (!auth.authorized) {
+    return unauthorizedResponse(auth.error)
+  }
 
-    if (!userDoc.exists) {
+  try {
+    const client = await clientStorage.getById(params.id)
+
+    if (!client) {
       return NextResponse.json(
         { error: 'Client not found' },
         { status: 404 }
       )
     }
 
-    const userData = userDoc.data()
-    const phone = userData?.phone
-
-    if (!phone) {
-      return NextResponse.json(
-        { error: 'Client phone not found' },
-        { status: 400 }
-      )
-    }
+    const phone = client.phone
 
     // Get all documents for this client
-    const documentsSnapshot = await db
-      .collection('documents')
-      .where('phone', '==', phone)
-      .get()
+    const docs = await documentStorage.getByPhone(phone)
 
-    // Delete files from Storage first
-    for (const doc of documentsSnapshot.docs) {
-      const data = doc.data()
-      if (data.filePath) {
+    // Delete files from storage
+    for (const doc of docs) {
+      if (doc.filePath) {
         try {
-          await deleteFile(data.filePath)
+          await fileStorage.delete(doc.filePath)
         } catch (error) {
-          console.error(`Error deleting file ${data.filePath}:`, error)
-          // Continue with deletion even if file delete fails
+          console.error(`Error deleting file ${doc.filePath}:`, error)
         }
       }
     }
 
-    // Use batch to delete all documents and the user atomically
-    const batch = db.batch()
+    // Delete all documents
+    await documentStorage.deleteByPhone(phone)
 
-    documentsSnapshot.docs.forEach(doc => {
-      batch.delete(doc.ref)
-    })
-
-    batch.delete(userRef)
-
-    await batch.commit()
+    // Delete client
+    await clientStorage.delete(params.id)
 
     return NextResponse.json({ success: true })
   } catch (error) {

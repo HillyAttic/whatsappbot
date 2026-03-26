@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getFirestore } from '@/lib/firebase-admin'
-import { uploadFile } from '@/lib/storage-service'
+import { clientStorage, documentStorage, fileStorage } from '@/lib/simple-storage'
+import { verifyAdminToken, unauthorizedResponse } from '@/lib/auth-middleware'
 
 /**
  * GET /api/admin/clients/[id]/documents - List all documents for a client
@@ -9,39 +9,23 @@ export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const auth = await verifyAdminToken(req)
+  if (!auth.authorized) {
+    return unauthorizedResponse(auth.error)
+  }
+
   try {
-    const db = getFirestore()
+    const client = await clientStorage.getById(params.id)
     
-    // Get the client to retrieve their phone number
-    const userDoc = await db.collection('users').doc(params.id).get()
-    
-    if (!userDoc.exists) {
+    if (!client) {
       return NextResponse.json(
         { error: 'Client not found' },
         { status: 404 }
       )
     }
 
-    const userData = userDoc.data()
-    const phone = userData?.phone
-
-    if (!phone) {
-      return NextResponse.json(
-        { error: 'Client phone not found' },
-        { status: 400 }
-      )
-    }
-
-    // Get all documents for this phone
-    const snapshot = await db
-      .collection('documents')
-      .where('phone', '==', phone)
-      .get()
-
-    const documents = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-    }))
+    const phone = client.phone
+    const documents = await documentStorage.getByPhone(phone)
 
     return NextResponse.json(documents)
   } catch (error) {
@@ -60,28 +44,22 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const auth = await verifyAdminToken(req)
+  if (!auth.authorized) {
+    return unauthorizedResponse(auth.error)
+  }
+
   try {
-    const db = getFirestore()
+    const client = await clientStorage.getById(params.id)
     
-    // Get the client to retrieve their phone number
-    const userDoc = await db.collection('users').doc(params.id).get()
-    
-    if (!userDoc.exists) {
+    if (!client) {
       return NextResponse.json(
         { error: 'Client not found' },
         { status: 404 }
       )
     }
 
-    const userData = userDoc.data()
-    const phone = userData?.phone
-
-    if (!phone) {
-      return NextResponse.json(
-        { error: 'Client phone not found' },
-        { status: 400 }
-      )
-    }
+    const phone = client.phone
 
     // Parse multipart form data
     const formData = await req.formData()
@@ -95,26 +73,18 @@ export async function POST(
       )
     }
 
-    // Upload file to Firebase Storage
+    // Upload file to storage
     const fileBuffer = Buffer.from(await file.arrayBuffer())
-    const filePath = await uploadFile(phone, fileBuffer, file.name)
+    const filePath = await fileStorage.upload(phone, fileBuffer, file.name)
 
-    // Create document in Firestore
-    const docRef = await db.collection('documents').add({
+    // Create document
+    const document = await documentStorage.create({
       phone,
       title,
       filePath,
     })
 
-    const doc = await docRef.get()
-
-    return NextResponse.json(
-      {
-        id: doc.id,
-        ...doc.data(),
-      },
-      { status: 201 }
-    )
+    return NextResponse.json(document, { status: 201 })
   } catch (error) {
     console.error('Error creating document:', error)
     return NextResponse.json(

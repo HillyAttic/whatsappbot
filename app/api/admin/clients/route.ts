@@ -1,20 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getFirestore } from '@/lib/firebase-admin'
+import { clientStorage } from '@/lib/simple-storage'
 import { normalizePhone } from '@/lib/phone'
+import { verifyAdminToken, unauthorizedResponse } from '@/lib/auth-middleware'
 
 /**
  * GET /api/admin/clients - List all clients
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await verifyAdminToken(req)
+  if (!auth.authorized) {
+    return unauthorizedResponse(auth.error)
+  }
+
   try {
-    const db = getFirestore()
-    const snapshot = await db.collection('users').get()
-
-    const clients = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-    }))
-
+    const clients = await clientStorage.getAll()
     return NextResponse.json(clients)
   } catch (error) {
     console.error('Error fetching clients:', error)
@@ -29,6 +28,11 @@ export async function GET() {
  * POST /api/admin/clients - Create a new client
  */
 export async function POST(req: NextRequest) {
+  const auth = await verifyAdminToken(req)
+  if (!auth.authorized) {
+    return unauthorizedResponse(auth.error)
+  }
+
   try {
     const body = await req.json()
     const { name, phone } = body
@@ -41,22 +45,12 @@ export async function POST(req: NextRequest) {
     }
 
     const normalizedPhone = normalizePhone(phone)
-
-    const db = getFirestore()
-    const docRef = await db.collection('users').add({
+    const client = await clientStorage.create({
       name,
       phone: normalizedPhone,
     })
 
-    const doc = await docRef.get()
-
-    return NextResponse.json(
-      {
-        id: doc.id,
-        ...doc.data(),
-      },
-      { status: 201 }
-    )
+    return NextResponse.json(client, { status: 201 })
   } catch (error) {
     console.error('Error creating client:', error)
     return NextResponse.json(
