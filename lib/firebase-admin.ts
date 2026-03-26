@@ -19,13 +19,17 @@ function initializeFirebase(): admin.app.App {
 
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON
   if (!serviceAccountJson) {
+    console.error('FIREBASE_SERVICE_ACCOUNT_JSON environment variable is missing')
     throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON environment variable is required')
   }
 
   let serviceAccount
   try {
     serviceAccount = JSON.parse(serviceAccountJson)
+    console.log('Firebase service account parsed successfully, project:', serviceAccount.project_id)
   } catch (error) {
+    console.error('Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON:', error)
+    console.error('First 100 chars:', serviceAccountJson.substring(0, 100))
     throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON')
   }
 
