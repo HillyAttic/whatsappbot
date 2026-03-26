@@ -33,6 +33,7 @@ export default function AdminPage() {
   const [docFile, setDocFile] = useState<File | null>(null)
   const [showDocForm, setShowDocForm] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [migrating, setMigrating] = useState(false)
 
   // Load clients
   useEffect(() => {
@@ -172,17 +173,56 @@ export default function AdminPage() {
     }
   }
 
+  const handleMigrateDocuments = async () => {
+    if (!confirm('Migrate existing documents from Storage to Firestore?')) return
+    
+    try {
+      setMigrating(true)
+      const token = getToken()
+      const res = await fetch('/api/admin/migrate-documents', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      const data = await res.json()
+      
+      if (res.ok) {
+        alert(`Migration complete! Created: ${data.migrated}, Skipped: ${data.skipped}`)
+        if (selectedClient) {
+          loadDocuments(selectedClient.id)
+        }
+      } else {
+        alert(`Migration failed: ${data.error}`)
+      }
+    } catch (error) {
+      console.error('Error migrating documents:', error)
+      alert('Migration failed')
+    } finally {
+      setMigrating(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold">WhatsApp Bot Admin</h1>
-          <button
-            onClick={() => signOut()}
-            className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
-          >
-            Sign Out
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleMigrateDocuments}
+              disabled={migrating}
+              className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 disabled:bg-gray-400"
+            >
+              {migrating ? 'Migrating...' : 'Migrate Docs'}
+            </button>
+            <button
+              onClick={() => signOut()}
+              className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
+            >
+              Sign Out
+            </button>
+          </div>
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
