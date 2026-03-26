@@ -49,7 +49,7 @@ export async function PUT(
     if (file) {
       const fileBuffer = Buffer.from(await file.arrayBuffer())
       const timestamp = Date.now()
-      const newFilePath = `documents/${phone}/${timestamp}_${file.name}`
+      const newFilePath = `users/${phone}/documents/${timestamp}_${file.name}`
       await uploadFile(fileBuffer, newFilePath, file.type)
 
       // Delete old file

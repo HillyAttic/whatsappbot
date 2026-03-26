@@ -87,7 +87,7 @@ export async function POST(
     // Upload file to Firebase Storage
     const fileBuffer = Buffer.from(await file.arrayBuffer())
     const timestamp = Date.now()
-    const filePath = `documents/${phone}/${timestamp}_${file.name}`
+    const filePath = `users/${phone}/documents/${timestamp}_${file.name}`
     await uploadFile(fileBuffer, filePath, file.type)
 
     // Create document in Firestore
