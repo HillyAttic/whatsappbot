@@ -10,6 +10,7 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@netlify/plugin-nextjs": "^5.15.9",
     "firebase-admin": "^12.0.0",
     "next": "^14.0.0",
     "react": "^18.2.0",

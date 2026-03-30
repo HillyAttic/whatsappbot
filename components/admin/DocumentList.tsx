@@ -25,6 +25,7 @@ interface DocumentListProps {
   onEdit: (document: DocumentRecord) => void
   onDelete: (document: DocumentRecord) => void
   onUpload: (preset: UploadPreset) => void
+  getAuthToken: () => string | null
 }
 
 function getFileExtension(filePath: string): string {
@@ -47,9 +48,31 @@ function getFileIcon(ext: string): { color: string; label: string } {
   }
 }
 
-function DocRow({ doc, onEdit, onDelete }: { doc: DocumentRecord; onEdit: () => void; onDelete: () => void }) {
+function DocRow({ doc, onEdit, onDelete, getAuthToken }: { doc: DocumentRecord; onEdit: () => void; onDelete: () => void; getAuthToken: () => string | null }) {
+  const [isLoadingUrl, setIsLoadingUrl] = useState(false)
   const ext = getFileExtension(doc.filePath)
   const icon = getFileIcon(ext)
+  
+  const handleView = async () => {
+    try {
+      setIsLoadingUrl(true)
+      const token = getAuthToken()
+      const response = await fetch(`/api/admin/documents/${doc.id}/download-url`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      if (!response.ok) throw new Error('Failed to get download URL')
+      const data = await response.json()
+      window.open(data.url, '_blank')
+    } catch (error) {
+      console.error('Error viewing document:', error)
+      alert('Failed to open document. Please try again.')
+    } finally {
+      setIsLoadingUrl(false)
+    }
+  }
+  
   return (
     <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-hover/40 rounded-lg group transition-colors">
       <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase flex-shrink-0 ${icon.color}`}>
@@ -57,6 +80,24 @@ function DocRow({ doc, onEdit, onDelete }: { doc: DocumentRecord; onEdit: () => 
       </span>
       <span className="text-sm text-ink flex-1 min-w-0 truncate">{doc.title}</span>
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+        <button
+          onClick={handleView}
+          disabled={isLoadingUrl}
+          className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-surface-hover text-ink-muted hover:text-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          title="View"
+        >
+          {isLoadingUrl ? (
+            <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          ) : (
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          )}
+        </button>
         <button
           onClick={onEdit}
           className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-surface-hover text-ink-muted hover:text-accent transition-colors"
@@ -105,7 +146,7 @@ function ChevronIcon({ open }: { open: boolean }) {
   )
 }
 
-export default function DocumentList({ documents, onEdit, onDelete, onUpload }: DocumentListProps) {
+export default function DocumentList({ documents, onEdit, onDelete, onUpload, getAuthToken }: DocumentListProps) {
   // Track which sections are open (collapsed by default)
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
 
@@ -136,27 +177,27 @@ export default function DocumentList({ documents, onEdit, onDelete, onUpload }: 
         return (
           <div key={category} className="rounded-xl border border-surface-border overflow-hidden">
             {/* Category header */}
-            <button
-              onClick={() => toggle(category)}
-              className="w-full flex items-center gap-2.5 px-4 py-3 bg-surface hover:bg-surface-hover transition-colors text-left"
-            >
-              <ChevronIcon open={catOpen} />
-              <svg className="w-4 h-4 text-accent flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
-              </svg>
-              <span className="text-sm font-semibold text-ink flex-1">{category}</span>
-              {catDocCount > 0 && (
-                <span className="text-[11px] font-medium text-accent bg-accent/10 px-2 py-0.5 rounded-full">
-                  {catDocCount}
-                </span>
-              )}
+            <div className="flex items-center gap-2.5 px-4 py-3 bg-surface">
+              <button
+                onClick={() => toggle(category)}
+                className="flex items-center gap-2.5 flex-1 hover:opacity-80 transition-opacity text-left"
+              >
+                <ChevronIcon open={catOpen} />
+                <svg className="w-4 h-4 text-accent flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+                </svg>
+                <span className="text-sm font-semibold text-ink flex-1">{category}</span>
+                {catDocCount > 0 && (
+                  <span className="text-[11px] font-medium text-accent bg-accent/10 px-2 py-0.5 rounded-full">
+                    {catDocCount}
+                  </span>
+                )}
+              </button>
               {/* Direct upload for Incorporation & Other Documents */}
               {config.fiscalYears.length === 0 && (
-                <span onClick={e => { e.stopPropagation(); onUpload({ category, fiscalYear: null, subCategory: null }) }}>
-                  <UploadButton onClick={() => {}} />
-                </span>
+                <UploadButton onClick={() => onUpload({ category, fiscalYear: null, subCategory: null })} />
               )}
-            </button>
+            </div>
 
             {catOpen && (
               <div className="divide-y divide-surface-border">
@@ -168,7 +209,7 @@ export default function DocumentList({ documents, onEdit, onDelete, onUpload }: 
                       {leafDocs.length === 0 ? (
                         <p className="text-xs text-ink-muted px-2 py-2 italic">No documents uploaded</p>
                       ) : leafDocs.map(doc => (
-                        <DocRow key={doc.id} doc={doc} onEdit={() => onEdit(doc)} onDelete={() => onDelete(doc)} />
+                        <DocRow key={doc.id} doc={doc} onEdit={() => onEdit(doc)} onDelete={() => onDelete(doc)} getAuthToken={getAuthToken} />
                       ))}
                     </div>
                   )
@@ -183,27 +224,27 @@ export default function DocumentList({ documents, onEdit, onDelete, onUpload }: 
                   return (
                     <div key={fy}>
                       {/* FY header */}
-                      <button
-                        onClick={() => toggle(fyKey)}
-                        className="w-full flex items-center gap-2 pl-8 pr-4 py-2.5 hover:bg-surface-hover/60 transition-colors text-left"
-                      >
-                        <ChevronIcon open={fyOpen} />
-                        <svg className="w-3.5 h-3.5 text-ink-muted flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-                        </svg>
-                        <span className="text-xs font-semibold text-ink-secondary flex-1">{fy}</span>
-                        {fyDocCount > 0 && (
-                          <span className="text-[10px] font-medium text-ink-muted bg-surface-border px-1.5 py-0.5 rounded-full">
-                            {fyDocCount}
-                          </span>
-                        )}
+                      <div className="flex items-center gap-2 pl-8 pr-4 py-2.5 hover:bg-surface-hover/60 transition-colors">
+                        <button
+                          onClick={() => toggle(fyKey)}
+                          className="flex items-center gap-2 flex-1 text-left"
+                        >
+                          <ChevronIcon open={fyOpen} />
+                          <svg className="w-3.5 h-3.5 text-ink-muted flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                          </svg>
+                          <span className="text-xs font-semibold text-ink-secondary flex-1">{fy}</span>
+                          {fyDocCount > 0 && (
+                            <span className="text-[10px] font-medium text-ink-muted bg-surface-border px-1.5 py-0.5 rounded-full">
+                              {fyDocCount}
+                            </span>
+                          )}
+                        </button>
                         {/* Direct upload for categories with no sub-categories */}
                         {config.subCategories.length === 0 && (
-                          <span onClick={e => { e.stopPropagation(); onUpload({ category, fiscalYear: fy, subCategory: null }) }}>
-                            <UploadButton onClick={() => {}} />
-                          </span>
+                          <UploadButton onClick={() => onUpload({ category, fiscalYear: fy, subCategory: null })} />
                         )}
-                      </button>
+                      </div>
 
                       {fyOpen && (
                         <div className="divide-y divide-surface-border/50">
@@ -215,7 +256,7 @@ export default function DocumentList({ documents, onEdit, onDelete, onUpload }: 
                                 {leafDocs.length === 0 ? (
                                   <p className="text-xs text-ink-muted px-2 py-2 italic">No documents uploaded</p>
                                 ) : leafDocs.map(doc => (
-                                  <DocRow key={doc.id} doc={doc} onEdit={() => onEdit(doc)} onDelete={() => onDelete(doc)} />
+                                  <DocRow key={doc.id} doc={doc} onEdit={() => onEdit(doc)} onDelete={() => onDelete(doc)} getAuthToken={getAuthToken} />
                                 ))}
                               </div>
                             )
@@ -242,7 +283,7 @@ export default function DocumentList({ documents, onEdit, onDelete, onUpload }: 
                                   {leafDocs.length === 0 ? (
                                     <p className="text-xs text-ink-muted px-2 py-1.5 italic">No documents uploaded</p>
                                   ) : leafDocs.map(doc => (
-                                    <DocRow key={doc.id} doc={doc} onEdit={() => onEdit(doc)} onDelete={() => onDelete(doc)} />
+                                    <DocRow key={doc.id} doc={doc} onEdit={() => onEdit(doc)} onDelete={() => onDelete(doc)} getAuthToken={getAuthToken} />
                                   ))}
                                 </div>
                               </div>
@@ -267,7 +308,7 @@ export default function DocumentList({ documents, onEdit, onDelete, onUpload }: 
           </div>
           <div className="px-2 py-1.5">
             {uncategorised.map(doc => (
-              <DocRow key={doc.id} doc={doc} onEdit={() => onEdit(doc)} onDelete={() => onDelete(doc)} />
+              <DocRow key={doc.id} doc={doc} onEdit={() => onEdit(doc)} onDelete={() => onDelete(doc)} getAuthToken={getAuthToken} />
             ))}
           </div>
         </div>

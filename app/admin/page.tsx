@@ -289,6 +289,7 @@ export default function AdminPage() {
                   onEdit={(doc) => { setEditingDoc(doc); setUploadPreset(null); setDocModal('edit') }}
                   onDelete={setDeletingDoc}
                   onUpload={(preset) => { setEditingDoc(null); setUploadPreset(preset); setDocModal('create') }}
+                  getAuthToken={getToken}
                 />
               )}
             </div>
