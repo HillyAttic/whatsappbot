@@ -8,21 +8,34 @@ interface ConfirmDialogProps {
 
 export default function ConfirmDialog({ message, onConfirm, onCancel }: ConfirmDialogProps) {
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-        <p className="text-gray-800 mb-6">{message}</p>
+    <div
+      className="fixed inset-0 bg-black/40 modal-backdrop flex items-center justify-center z-50 animate-fade-in"
+      onClick={onCancel}
+    >
+      <div
+        className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-modal animate-scale-in"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-3 mb-6">
+          <div className="w-10 h-10 rounded-full danger-light flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg className="w-5 h-5 text-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            </svg>
+          </div>
+          <p className="text-ink text-[15px] leading-relaxed pt-2">{message}</p>
+        </div>
         <div className="flex justify-end gap-3">
           <button
             onClick={onCancel}
-            className="px-4 py-2 text-gray-600 hover:text-gray-800"
+            className="px-4 py-2 text-sm font-medium text-ink-secondary hover:text-ink rounded-lg hover:bg-surface-hover transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+            className="px-4 py-2 text-sm font-medium bg-danger text-white rounded-lg hover:bg-danger-hover transition-colors shadow-sm"
           >
-            Confirm
+            Delete
           </button>
         </div>
       </div>
