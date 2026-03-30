@@ -1,8 +1,6 @@
 import { getFirestore } from './firebase-admin'
 import { normalizePhone } from './phone'
 
-const db = getFirestore()
-
 export interface User {
   phone: string
   name: string
@@ -48,6 +46,7 @@ export function sanitizeMessageBody(text: string): string {
  * Find user by phone number
  */
 export async function findUser(phone: string): Promise<User | null> {
+  const db = getFirestore()
   const normalizedPhone = normalizePhone(phone)
   const snapshot = await db.collection('users').where('phone', '==', normalizedPhone).limit(1).get()
 
@@ -63,6 +62,7 @@ export async function findUser(phone: string): Promise<User | null> {
  * Get all documents for a user
  */
 export async function getDocuments(phone: string): Promise<Document[]> {
+  const db = getFirestore()
   const normalizedPhone = normalizePhone(phone)
   const snapshot = await db
     .collection('documents')

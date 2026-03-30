@@ -4,7 +4,7 @@ import { deleteFile } from '@/lib/storage-service'
 import { normalizePhone } from '@/lib/phone'
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/auth-middleware'
 
-const db = getFirestore()
+export const dynamic = 'force-dynamic'
 
 /**
  * PUT /api/admin/clients/[id] - Update a client
@@ -19,6 +19,7 @@ export async function PUT(
   }
 
   try {
+    const db = getFirestore()
     const body = await req.json()
     const { name, phone } = body
 
@@ -62,6 +63,7 @@ export async function DELETE(
   }
 
   try {
+    const db = getFirestore()
     const clientDoc = await db.collection('users').doc(params.id).get()
 
     if (!clientDoc.exists) {

@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * GET /api/admin/debug - Diagnostic endpoint to check environment variables and Firebase connectivity
  * WARNING: Remove this endpoint after debugging! It exposes sensitive info.

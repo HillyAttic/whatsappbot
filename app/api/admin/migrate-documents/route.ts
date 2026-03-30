@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getFirestore, getStorage } from '@/lib/firebase-admin'
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/auth-middleware'
 
-const db = getFirestore()
+export const dynamic = 'force-dynamic'
 
 /**
  * POST /api/admin/migrate-documents - Scan Storage and create Firestore records for existing files
@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const db = getFirestore()
     const bucket = getStorage().bucket()
     
     // Get all users

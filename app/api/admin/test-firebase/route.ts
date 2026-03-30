@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/auth-middleware'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * GET /api/admin/test-firebase - Test Firebase connection
  */

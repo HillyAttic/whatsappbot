@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/simple-auth'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(req: NextRequest) {
   try {
     const { token } = await req.json()

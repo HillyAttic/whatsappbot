@@ -3,7 +3,7 @@ import { getFirestore } from '@/lib/firebase-admin'
 import { uploadFile } from '@/lib/storage-service'
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/auth-middleware'
 
-const db = getFirestore()
+export const dynamic = 'force-dynamic'
 
 /**
  * GET /api/admin/clients/[id]/documents - List all documents for a client
@@ -18,6 +18,7 @@ export async function GET(
   }
 
   try {
+    const db = getFirestore()
     const clientDoc = await db.collection('users').doc(params.id).get()
     
     if (!clientDoc.exists) {
@@ -69,6 +70,7 @@ export async function POST(
   }
 
   try {
+    const db = getFirestore()
     const clientDoc = await db.collection('users').doc(params.id).get()
     
     if (!clientDoc.exists) {

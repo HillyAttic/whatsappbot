@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateSignature } from '@/lib/validate-signature'
+
+export const dynamic = 'force-dynamic'
 import {
   parseWebhookPayload,
   sanitizeMessageBody,

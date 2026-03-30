@@ -3,7 +3,7 @@ import { getFirestore } from '@/lib/firebase-admin'
 import { normalizePhone } from '@/lib/phone'
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/auth-middleware'
 
-const db = getFirestore()
+export const dynamic = 'force-dynamic'
 
 /**
  * GET /api/admin/clients - List all clients
@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const db = getFirestore()
     const snapshot = await db.collection('users').get()
     const clients = snapshot.docs.map(doc => ({
       id: doc.id,
@@ -40,6 +41,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const db = getFirestore()
     const body = await req.json()
     const { name, phone } = body
 

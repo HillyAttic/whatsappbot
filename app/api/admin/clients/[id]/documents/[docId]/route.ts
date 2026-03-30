@@ -3,7 +3,7 @@ import { getFirestore } from '@/lib/firebase-admin'
 import { uploadFile, deleteFile } from '@/lib/storage-service'
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/auth-middleware'
 
-const db = getFirestore()
+export const dynamic = 'force-dynamic'
 
 /**
  * PUT /api/admin/clients/[id]/documents/[docId] - Update a document
@@ -18,6 +18,7 @@ export async function PUT(
   }
 
   try {
+    const db = getFirestore()
     const docRef = db.collection('documents').doc(params.docId)
     const docSnap = await docRef.get()
 
@@ -99,6 +100,7 @@ export async function DELETE(
   }
 
   try {
+    const db = getFirestore()
     const docRef = db.collection('documents').doc(params.docId)
     const docSnap = await docRef.get()
 
