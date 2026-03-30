@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Store session
-      storeSession(normalizedPhone, documents)
+      await storeSession(normalizedPhone, documents)
 
       // Build numbered list
       const lines = documents.map((doc, index) => `${index + 1}. ${doc.title}`)
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
     const numberMatch = sanitizedText.match(/^(\d+)$/)
     if (numberMatch) {
       const selectedNumber = parseInt(numberMatch[1], 10)
-      const session = getSession(normalizedPhone)
+      const session = await getSession(normalizedPhone)
 
       if (!session) {
         await sendMessage(from, "Please send 'Hi' to start.")

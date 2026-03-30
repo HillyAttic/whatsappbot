@@ -76,15 +76,26 @@ export async function getDocuments(phone: string): Promise<Document[]> {
   })) as Document[]
 }
 
-/**
- * Session storage for document selection (in-memory)
- */
-const sessions = new Map<string, Document[]>()
+const SESSION_TTL_MS = 30 * 60 * 1000 // 30 minutes
 
-export function storeSession(phone: string, documents: Document[]): void {
-  sessions.set(phone, documents)
+export async function storeSession(phone: string, documents: Document[]): Promise<void> {
+  const db = getFirestore()
+  const now = Date.now()
+  await db.collection('sessions').doc(phone).set({
+    documentList: documents,
+    createdAt: new Date(now).toISOString(),
+    expiresAt: new Date(now + SESSION_TTL_MS).toISOString(),
+  })
 }
 
-export function getSession(phone: string): Document[] | null {
-  return sessions.get(phone) || null
+export async function getSession(phone: string): Promise<Document[] | null> {
+  const db = getFirestore()
+  const doc = await db.collection('sessions').doc(phone).get()
+  if (!doc.exists) return null
+  const data = doc.data()!
+  if (new Date(data.expiresAt) < new Date()) {
+    await doc.ref.delete()
+    return null
+  }
+  return data.documentList as Document[]
 }

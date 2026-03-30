@@ -78,8 +78,8 @@ export async function DELETE(
     // Get all documents for this client
     const docsSnapshot = await db.collection('documents').where('phone', '==', phone).get()
 
-    // Delete files from storage and documents
-    const deletePromises = docsSnapshot.docs.map(async (doc) => {
+    // Delete files from storage (best-effort — cannot be made atomic with Firestore)
+    for (const doc of docsSnapshot.docs) {
       const data = doc.data()
       if (data.filePath) {
         try {
@@ -88,13 +88,15 @@ export async function DELETE(
           console.error(`Error deleting file ${data.filePath}:`, error)
         }
       }
-      await doc.ref.delete()
-    })
+    }
 
-    await Promise.all(deletePromises)
-
-    // Delete client
-    await db.collection('users').doc(params.id).delete()
+    // Atomically delete all Firestore records in a single batch
+    const batch = db.batch()
+    for (const doc of docsSnapshot.docs) {
+      batch.delete(doc.ref)
+    }
+    batch.delete(db.collection('users').doc(params.id))
+    await batch.commit()
 
     return NextResponse.json({ success: true })
   } catch (error) {
