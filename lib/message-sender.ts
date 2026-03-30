@@ -22,7 +22,7 @@ export async function sendMessage(to: string, text: string): Promise<void> {
     throw new Error('PHONE_NUMBER_ID environment variable is required')
   }
 
-  const url = `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`
+  const url = `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`
   const body = JSON.stringify({
     messaging_product: 'whatsapp',
     to,
