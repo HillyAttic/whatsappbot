@@ -106,20 +106,8 @@ function ChevronIcon({ open }: { open: boolean }) {
 }
 
 export default function DocumentList({ documents, onEdit, onDelete, onUpload }: DocumentListProps) {
-  // Track which sections are open (all open by default)
-  const allKeys = (() => {
-    const keys: string[] = []
-    for (const cat of CATEGORY_NAMES) {
-      keys.push(cat)
-      const config = CATEGORIES[cat]
-      for (const fy of config.fiscalYears) {
-        keys.push(`${cat}||${fy}`)
-      }
-    }
-    return keys
-  })()
-
-  const [openSections, setOpenSections] = useState<Set<string>>(new Set(allKeys))
+  // Track which sections are open (collapsed by default)
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set())
 
   const toggle = (key: string) => {
     setOpenSections(prev => {

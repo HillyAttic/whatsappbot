@@ -265,10 +265,10 @@ export default function AdminPage() {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <main className="flex-1 flex flex-col min-h-0">
         {selectedClient ? (
-          <div className="flex-1 flex flex-col animate-panel-in">
-            <header className="px-8 py-5 border-b border-surface-border bg-white/60 backdrop-blur-sm">
+          <div className="flex-1 flex flex-col min-h-0 animate-panel-in">
+            <header className="px-8 py-5 border-b border-surface-border bg-white/60 backdrop-blur-sm flex-shrink-0">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-xl font-display font-semibold text-ink tracking-tight">{selectedClient.name}</h2>
@@ -280,7 +280,7 @@ export default function AdminPage() {
                 </button>
               </div>
             </header>
-            <div className="flex-1 overflow-y-auto p-8">
+            <div className="flex-1 overflow-y-auto p-8 min-h-0">
               {loadingDocs ? (
                 <div className="space-y-3">{[0,1,2,3].map((i) => (<div key={i} className="h-14 bg-white rounded-xl animate-pulse-soft" />))}</div>
               ) : (
