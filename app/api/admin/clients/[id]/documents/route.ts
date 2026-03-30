@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getFirestore } from '@/lib/firebase-admin'
 import { uploadFile } from '@/lib/storage-service'
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/auth-middleware'
+import { CATEGORIES, buildStoragePath } from '@/lib/document-categories'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,7 +21,7 @@ export async function GET(
   try {
     const db = getFirestore()
     const clientDoc = await db.collection('users').doc(params.id).get()
-    
+
     if (!clientDoc.exists) {
       return NextResponse.json(
         { error: 'Client not found' },
@@ -29,8 +30,7 @@ export async function GET(
     }
 
     const phone = clientDoc.data()?.phone
-    
-    // Query documents without orderBy to avoid index requirement
+
     const snapshot = await db.collection('documents')
       .where('phone', '==', phone)
       .get()
@@ -39,8 +39,7 @@ export async function GET(
       id: doc.id,
       ...doc.data()
     }))
-    
-    // Sort in memory by uploadedAt descending
+
     documents.sort((a: any, b: any) => {
       const dateA = new Date(a.uploadedAt || 0).getTime()
       const dateB = new Date(b.uploadedAt || 0).getTime()
@@ -72,7 +71,7 @@ export async function POST(
   try {
     const db = getFirestore()
     const clientDoc = await db.collection('users').doc(params.id).get()
-    
+
     if (!clientDoc.exists) {
       return NextResponse.json(
         { error: 'Client not found' },
@@ -81,11 +80,14 @@ export async function POST(
     }
 
     const phone = clientDoc.data()?.phone
+    const clientName = clientDoc.data()?.name
 
-    // Parse multipart form data
     const formData = await req.formData()
     const title = formData.get('title') as string
     const file = formData.get('file') as File
+    const category = formData.get('category') as string
+    const fiscalYear = (formData.get('fiscalYear') as string) || null
+    const subCategory = (formData.get('subCategory') as string) || null
 
     if (!title || !file) {
       return NextResponse.json(
@@ -94,17 +96,40 @@ export async function POST(
       )
     }
 
-    // Upload file to Firebase Storage
+    if (!category || !CATEGORIES[category]) {
+      return NextResponse.json(
+        { error: 'Valid category is required' },
+        { status: 400 }
+      )
+    }
+
+    const catConfig = CATEGORIES[category]
+
+    if (catConfig.fiscalYears.length > 0 && !fiscalYear) {
+      return NextResponse.json(
+        { error: 'Fiscal year is required for this category' },
+        { status: 400 }
+      )
+    }
+
+    if (catConfig.subCategories.length > 0 && !subCategory) {
+      return NextResponse.json(
+        { error: 'Sub-category is required for this category' },
+        { status: 400 }
+      )
+    }
+
     const fileBuffer = Buffer.from(await file.arrayBuffer())
-    const timestamp = Date.now()
-    const filePath = `users/${phone}/documents/${timestamp}_${file.name}`
+    const filePath = buildStoragePath(clientName, category, fiscalYear, subCategory, file.name)
     await uploadFile(fileBuffer, filePath, file.type)
 
-    // Create document in Firestore
     const docRef = await db.collection('documents').add({
       phone,
       title,
       filePath,
+      category,
+      fiscalYear: fiscalYear ?? null,
+      subCategory: subCategory ?? null,
       uploadedAt: new Date().toISOString()
     })
 
@@ -113,6 +138,9 @@ export async function POST(
       phone,
       title,
       filePath,
+      category,
+      fiscalYear: fiscalYear ?? null,
+      subCategory: subCategory ?? null,
       uploadedAt: new Date().toISOString()
     }, { status: 201 })
   } catch (error) {

@@ -11,6 +11,9 @@ export interface Document {
   title: string
   filePath: string
   uploadedAt: string
+  category?: string
+  fiscalYear?: string | null
+  subCategory?: string | null
 }
 
 /**

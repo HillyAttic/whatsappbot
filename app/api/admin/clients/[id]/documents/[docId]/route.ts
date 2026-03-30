@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getFirestore } from '@/lib/firebase-admin'
 import { uploadFile, deleteFile } from '@/lib/storage-service'
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/auth-middleware'
+import { CATEGORIES, buildStoragePath } from '@/lib/document-categories'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,10 +33,20 @@ export async function PUT(
     const document = docSnap.data()
     const phone = document?.phone
 
-    // Parse multipart form data
+    // Get client name for path building
+    const clientDoc = await db.collection('users').doc(params.id).get()
+    const clientName = clientDoc.data()?.name
+
     const formData = await req.formData()
     const title = formData.get('title') as string
     const file = formData.get('file') as File | null
+    const category = (formData.get('category') as string) || document?.category
+    const fiscalYear = formData.has('fiscalYear')
+      ? ((formData.get('fiscalYear') as string) || null)
+      : (document?.fiscalYear ?? null)
+    const subCategory = formData.has('subCategory')
+      ? ((formData.get('subCategory') as string) || null)
+      : (document?.subCategory ?? null)
 
     if (!title) {
       return NextResponse.json(
@@ -44,16 +55,20 @@ export async function PUT(
       )
     }
 
+    if (category && !CATEGORIES[category]) {
+      return NextResponse.json(
+        { error: 'Invalid category' },
+        { status: 400 }
+      )
+    }
+
     let filePath = document?.filePath
 
-    // If a new file is provided, upload it and delete the old one
     if (file) {
       const fileBuffer = Buffer.from(await file.arrayBuffer())
-      const timestamp = Date.now()
-      const newFilePath = `users/${phone}/documents/${timestamp}_${file.name}`
+      const newFilePath = buildStoragePath(clientName, category, fiscalYear, subCategory, file.name)
       await uploadFile(fileBuffer, newFilePath, file.type)
 
-      // Delete old file
       if (document?.filePath) {
         try {
           await deleteFile(document.filePath)
@@ -65,10 +80,12 @@ export async function PUT(
       filePath = newFilePath
     }
 
-    // Update document
     await docRef.update({
       title,
       filePath,
+      category: category ?? null,
+      fiscalYear: fiscalYear ?? null,
+      subCategory: subCategory ?? null,
     })
 
     return NextResponse.json({
@@ -76,6 +93,9 @@ export async function PUT(
       phone,
       title,
       filePath,
+      category: category ?? null,
+      fiscalYear: fiscalYear ?? null,
+      subCategory: subCategory ?? null,
       uploadedAt: document?.uploadedAt
     })
   } catch (error) {
@@ -113,7 +133,6 @@ export async function DELETE(
 
     const document = docSnap.data()
 
-    // Delete file from storage
     if (document?.filePath) {
       try {
         await deleteFile(document.filePath)
@@ -126,7 +145,6 @@ export async function DELETE(
       }
     }
 
-    // Delete document
     await docRef.delete()
 
     return NextResponse.json({ success: true })

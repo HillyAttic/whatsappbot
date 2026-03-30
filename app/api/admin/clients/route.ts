@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getFirestore } from '@/lib/firebase-admin'
+import { uploadFile } from '@/lib/storage-service'
 import { normalizePhone } from '@/lib/phone'
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/auth-middleware'
+import { getClientFolderPaths } from '@/lib/document-categories'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,6 +60,13 @@ export async function POST(req: NextRequest) {
       phone: normalizedPhone,
       createdAt: new Date().toISOString()
     })
+
+    // Scaffold the JPCO folder structure in Firebase Storage
+    const placeholder = Buffer.from('')
+    const folderPaths = getClientFolderPaths(name)
+    await Promise.all(
+      folderPaths.map(p => uploadFile(placeholder, p, 'application/octet-stream'))
+    )
 
     return NextResponse.json({
       id: docRef.id,

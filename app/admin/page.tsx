@@ -19,6 +19,9 @@ interface Document {
   title: string
   filePath: string
   uploadedAt?: string
+  category?: string
+  fiscalYear?: string | null
+  subCategory?: string | null
 }
 
 type ModalMode = 'create' | 'edit' | null
@@ -39,6 +42,7 @@ export default function AdminPage() {
   const [docModal, setDocModal] = useState<ModalMode>(null)
   const [editingDoc, setEditingDoc] = useState<Document | null>(null)
   const [deletingDoc, setDeletingDoc] = useState<Document | null>(null)
+  const [uploadPreset, setUploadPreset] = useState<{ category: string; fiscalYear: string | null; subCategory: string | null } | null>(null)
   const [uploading, setUploading] = useState(false)
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
@@ -141,13 +145,16 @@ export default function AdminPage() {
     }
   }
 
-  const handleCreateDocument = async (data: { title: string; file: File | null }) => {
+  const handleCreateDocument = async (data: { title: string; file: File | null; category: string; fiscalYear: string | null; subCategory: string | null }) => {
     if (!selectedClient || !data.file) return
     try {
       setUploading(true)
       const formData = new FormData()
       formData.append('title', data.title)
       formData.append('file', data.file)
+      formData.append('category', data.category)
+      if (data.fiscalYear) formData.append('fiscalYear', data.fiscalYear)
+      if (data.subCategory) formData.append('subCategory', data.subCategory)
       const res = await fetch('/api/admin/clients/' + selectedClient.id + '/documents', {
         method: 'POST',
         headers: authHeaders(),
@@ -155,6 +162,7 @@ export default function AdminPage() {
       })
       if (!res.ok) throw new Error('Failed')
       setDocModal(null)
+      setUploadPreset(null)
       await loadDocuments(selectedClient.id)
       showToast('Document uploaded')
     } catch (error) {
@@ -164,13 +172,16 @@ export default function AdminPage() {
     }
   }
 
-  const handleUpdateDocument = async (data: { title: string; file: File | null }) => {
+  const handleUpdateDocument = async (data: { title: string; file: File | null; category: string; fiscalYear: string | null; subCategory: string | null }) => {
     if (!selectedClient || !editingDoc) return
     try {
       setUploading(true)
       const formData = new FormData()
       formData.append('title', data.title)
       if (data.file) formData.append('file', data.file)
+      formData.append('category', data.category)
+      formData.append('fiscalYear', data.fiscalYear || '')
+      formData.append('subCategory', data.subCategory || '')
       const res = await fetch('/api/admin/clients/' + selectedClient.id + '/documents/' + editingDoc.id, {
         method: 'PUT',
         headers: authHeaders(),
@@ -273,7 +284,12 @@ export default function AdminPage() {
               {loadingDocs ? (
                 <div className="space-y-3">{[0,1,2,3].map((i) => (<div key={i} className="h-14 bg-white rounded-xl animate-pulse-soft" />))}</div>
               ) : (
-                <DocumentList documents={documents} onEdit={(doc) => { setEditingDoc(doc); setDocModal('edit') }} onDelete={setDeletingDoc} />
+                <DocumentList
+                  documents={documents}
+                  onEdit={(doc) => { setEditingDoc(doc); setUploadPreset(null); setDocModal('edit') }}
+                  onDelete={setDeletingDoc}
+                  onUpload={(preset) => { setEditingDoc(null); setUploadPreset(preset); setDocModal('create') }}
+                />
               )}
             </div>
           </div>
@@ -302,13 +318,18 @@ export default function AdminPage() {
       )}
 
       {docModal && (
-        <div className="fixed inset-0 bg-black/40 modal-backdrop flex items-center justify-center z-50 animate-fade-in" onClick={() => { setDocModal(null); setEditingDoc(null) }}>
+        <div className="fixed inset-0 bg-black/40 modal-backdrop flex items-center justify-center z-50 animate-fade-in" onClick={() => { setDocModal(null); setEditingDoc(null); setUploadPreset(null) }}>
           <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-modal animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-display font-semibold text-ink mb-5">{docModal === 'create' ? 'Upload Document' : 'Edit Document'}</h3>
             {uploading ? (
               <div className="py-8 text-center"><div className="animate-spin rounded-full h-8 w-8 border-2 border-accent border-t-transparent mx-auto mb-3" /><p className="text-sm text-ink-muted">Uploading...</p></div>
             ) : (
-              <DocumentForm initial={editingDoc || undefined} onSubmit={docModal === 'create' ? handleCreateDocument : handleUpdateDocument} onCancel={() => { setDocModal(null); setEditingDoc(null) }} />
+              <DocumentForm
+                initial={editingDoc || undefined}
+                preset={docModal === 'create' ? (uploadPreset || undefined) : undefined}
+                onSubmit={docModal === 'create' ? handleCreateDocument : handleUpdateDocument}
+                onCancel={() => { setDocModal(null); setEditingDoc(null); setUploadPreset(null) }}
+              />
             )}
           </div>
         </div>
