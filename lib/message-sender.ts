@@ -5,13 +5,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-/**
- * Sends a WhatsApp message using the WhatsApp Cloud API.
- * Retries up to 3 times with exponential backoff on 5xx / network errors.
- * @param to - The recipient's phone number
- * @param text - The message text to send
- */
-export async function sendMessage(to: string, text: string): Promise<void> {
+function getWhatsAppConfig() {
   const whatsappToken = process.env.WHATSAPP_TOKEN
   const phoneNumberId = process.env.PHONE_NUMBER_ID
 
@@ -22,13 +16,15 @@ export async function sendMessage(to: string, text: string): Promise<void> {
     throw new Error('PHONE_NUMBER_ID environment variable is required')
   }
 
-  const url = `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`
-  const body = JSON.stringify({
-    messaging_product: 'whatsapp',
-    to,
-    type: 'text',
-    text: { body: text },
-  })
+  return {
+    url: `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`,
+    token: whatsappToken,
+  }
+}
+
+async function sendWhatsAppRequest(payload: object): Promise<void> {
+  const { url, token } = getWhatsAppConfig()
+  const body = JSON.stringify(payload)
 
   let lastError: Error = new Error('Unknown error')
 
@@ -41,7 +37,7 @@ export async function sendMessage(to: string, text: string): Promise<void> {
       const response = await fetch(url, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${whatsappToken}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body,
@@ -65,4 +61,37 @@ export async function sendMessage(to: string, text: string): Promise<void> {
   }
 
   throw lastError
+}
+
+/**
+ * Sends a text message via WhatsApp Cloud API.
+ */
+export async function sendMessage(to: string, text: string): Promise<void> {
+  await sendWhatsAppRequest({
+    messaging_product: 'whatsapp',
+    to,
+    type: 'text',
+    text: { body: text },
+  })
+}
+
+/**
+ * Sends a document (PDF, etc.) via WhatsApp Cloud API using a URL link.
+ */
+export async function sendDocument(
+  to: string,
+  documentUrl: string,
+  filename: string,
+  caption?: string
+): Promise<void> {
+  await sendWhatsAppRequest({
+    messaging_product: 'whatsapp',
+    to,
+    type: 'document',
+    document: {
+      link: documentUrl,
+      filename,
+      ...(caption && { caption }),
+    },
+  })
 }

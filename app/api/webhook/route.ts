@@ -10,7 +10,7 @@ import {
   saveBotSession,
 } from '@/lib/document-service'
 import { normalizePhone } from '@/lib/phone'
-import { sendMessage } from '@/lib/message-sender'
+import { sendMessage, sendDocument } from '@/lib/message-sender'
 import { processMessage } from '@/lib/bot-flow'
 
 /**
@@ -96,7 +96,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Send response
-    await sendMessage(from, result.message)
+    if (result.document) {
+      await sendDocument(from, result.document.url, result.document.filename, result.document.caption)
+    } else {
+      await sendMessage(from, result.message)
+    }
     return NextResponse.json({ status: 'ok' }, { status: 200 })
   } catch (error) {
     console.error('Webhook error:', error)

@@ -104,12 +104,14 @@ export async function getFilteredDocuments(
     query = query.where('subCategory', '==', subCategory)
   }
 
-  const snapshot = await query.orderBy('uploadedAt', 'desc').get()
+  const snapshot = await query.get()
 
-  return snapshot.docs.map(doc => ({
+  const docs = snapshot.docs.map(doc => ({
     id: doc.id,
     ...doc.data(),
   })) as Document[]
+
+  return docs.sort((a, b) => (b.uploadedAt || '').localeCompare(a.uploadedAt || ''))
 }
 
 import type { BotSession } from './bot-flow'

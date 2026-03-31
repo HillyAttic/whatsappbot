@@ -13,6 +13,7 @@ export interface BotSession {
 
 export interface FlowResult {
   message: string
+  document?: { url: string; filename: string; caption: string }
   session: BotSession | null
 }
 
@@ -211,8 +212,16 @@ export async function processMessage(
     const doc = session.documentList[num - 1]
     try {
       const signedUrl = await generateSignedUrl(doc.filePath)
-      const message = `Here is your document \u{1F4C4}\n\n${doc.title}\n\n${signedUrl}\n\n(Link valid for 5 minutes)`
-      return { message, session }
+      const filename = doc.filePath.split('/').pop() || doc.title
+      return {
+        message: '',
+        document: {
+          url: signedUrl,
+          filename,
+          caption: `Here is your document \u{1F4C4}\n\n${doc.title}`,
+        },
+        session,
+      }
     } catch (error) {
       console.error('Error generating signed URL:', error)
       return {
@@ -233,30 +242,38 @@ async function fetchAndListDocuments(
   phone: string,
   session: BotSession
 ): Promise<FlowResult> {
-  const documents = await getFilteredDocuments(
-    phone,
-    session.category!,
-    session.fiscalYear,
-    session.subCategory
-  )
+  try {
+    const documents = await getFilteredDocuments(
+      phone,
+      session.category!,
+      session.fiscalYear,
+      session.subCategory
+    )
 
-  if (documents.length === 0) {
+    if (documents.length === 0) {
+      return {
+        message: FLOW_MESSAGES.no_documents,
+        session: createSession('category_selection'),
+      }
+    }
+
+    const lines = documents.map((doc, i) => `${i + 1}. ${doc.title}`)
+    const message =
+      'Here are your documents:\n\n' + lines.join('\n') + '\n\nReply with the number to download.'
+
     return {
-      message: FLOW_MESSAGES.no_documents,
+      message,
+      session: {
+        ...session,
+        currentStep: 'list_documents',
+        documentList: documents,
+      },
+    }
+  } catch (error) {
+    console.error('Error fetching documents:', error)
+    return {
+      message: 'Something went wrong while fetching your documents. Please try again later.',
       session: createSession('category_selection'),
     }
-  }
-
-  const lines = documents.map((doc, i) => `${i + 1}. ${doc.title}`)
-  const message =
-    'Here are your documents:\n\n' + lines.join('\n') + '\n\nReply with the number to download.'
-
-  return {
-    message,
-    session: {
-      ...session,
-      currentStep: 'list_documents',
-      documentList: documents,
-    },
   }
 }
