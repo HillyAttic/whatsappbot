@@ -34,9 +34,6 @@ yarn-error.log*
 # Vercel
 .vercel/
 
-# Netlify
-.netlify/
-
 # IDE
 .vscode/
 .idea/
@@ -52,7 +49,6 @@ yarn-error.log*
 # Credentials and secrets
 ADMIN-CREDENTIALS.md
 _firebase_sa.txt
-_set_netlify_env.ps1
 *.key
 *.pem
 

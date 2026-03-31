@@ -20,7 +20,7 @@ function initializeFirebase() {
   }
 
   try {
-    const serviceAccount = JSON.parse(serviceAccountJson)
+    const serviceAccount = JSON.parse(serviceAccountJson.replace(/\n/g, '\\n'))
 
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
