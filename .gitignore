@@ -58,3 +58,5 @@ _set_netlify_env.ps1
 
 # Setup files (optional - remove if you want to track these)
 SETUP-ADMIN.md
+.vercel
+.env*.local
