@@ -34,6 +34,7 @@ export interface FlowResult {
   documents?: { url: string; filename: string; caption: string }[]
   interactive?: InteractivePayload
   followUp?: InteractivePayload
+  navigation?: InteractivePayload
   session: BotSession | null
 }
 
@@ -95,8 +96,6 @@ const STEP_INTERACTIVE: Record<string, InteractivePayload> = {
           { id: '2', title: 'FY 2022-23' },
           { id: '3', title: 'FY 2023-24' },
           { id: '4', title: 'FY 2024-25' },
-          { id: 'back', title: '\u2B05 Back' },
-          { id: 'main_menu', title: 'Main Menu' },
         ],
       },
     ],
@@ -112,8 +111,6 @@ const STEP_INTERACTIVE: Record<string, InteractivePayload> = {
           { id: '1', title: 'FY 2022-23' },
           { id: '2', title: 'FY 2023-24' },
           { id: '3', title: 'FY 2024-25' },
-          { id: 'back', title: '\u2B05 Back' },
-          { id: 'main_menu', title: 'Main Menu' },
         ],
       },
     ],
@@ -130,8 +127,6 @@ const STEP_INTERACTIVE: Record<string, InteractivePayload> = {
           { id: '2', title: 'FY 2023-24' },
           { id: '3', title: 'FY 2024-25' },
           { id: '4', title: 'FY 2025-26' },
-          { id: 'back', title: '\u2B05 Back' },
-          { id: 'main_menu', title: 'Main Menu' },
         ],
       },
     ],
@@ -146,8 +141,6 @@ const STEP_INTERACTIVE: Record<string, InteractivePayload> = {
         rows: [
           { id: '1', title: 'GSTR-1' },
           { id: '2', title: 'GSTR-3B' },
-          { id: 'back', title: '\u2B05 Back' },
-          { id: 'main_menu', title: 'Main Menu' },
         ],
       },
     ],
@@ -163,8 +156,6 @@ const STEP_INTERACTIVE: Record<string, InteractivePayload> = {
           { id: '1', title: 'FY 2022-23' },
           { id: '2', title: 'FY 2023-24' },
           { id: '3', title: 'FY 2024-25' },
-          { id: 'back', title: '\u2B05 Back' },
-          { id: 'main_menu', title: 'Main Menu' },
         ],
       },
     ],
@@ -181,8 +172,6 @@ const STEP_INTERACTIVE: Record<string, InteractivePayload> = {
           { id: '1', title: 'ITR' },
           { id: '2', title: 'Acknowledgement' },
           { id: '3', title: 'Computation' },
-          { id: 'back', title: '\u2B05 Back' },
-          { id: 'main_menu', title: 'Main Menu' },
         ],
       },
     ],
@@ -277,6 +266,7 @@ function buildStepResult(step: string, session: BotSession, prefixMessage?: stri
   return {
     message,
     interactive: interactive ?? undefined,
+    navigation: step !== 'category_selection' ? buildNavigation() : undefined,
     session,
   }
 }
@@ -286,6 +276,20 @@ function buildStepResult(step: string, session: BotSession, prefixMessage?: stri
  */
 function truncate(str: string, max: number): string {
   return str.length <= max ? str : str.slice(0, max - 1) + '…'
+}
+
+/**
+ * Build navigation buttons (Back + Main Menu) shown as a separate message below lists.
+ */
+function buildNavigation(): InteractivePayload {
+  return {
+    type: 'button',
+    body: 'Navigate:',
+    buttons: [
+      { id: 'back', title: 'Back' },
+      { id: 'main_menu', title: 'Main Menu' },
+    ],
+  }
 }
 
 /**
@@ -561,10 +565,6 @@ async function fetchAndListDocuments(
       rows.push({ id: String(i + 1), title: truncate(doc.title, 24) })
     })
 
-    // Add navigation rows
-    rows.push({ id: 'back', title: '\u2B05 Back' })
-    rows.push({ id: 'main_menu', title: 'Main Menu' })
-
     const bodyText =
       'Here are your documents \u{1F4C2}\n\nTap a document to download.'
 
@@ -583,6 +583,7 @@ async function fetchAndListDocuments(
     return {
       message: bodyText,
       interactive,
+      navigation: buildNavigation(),
       session: {
         ...session,
         currentStep: 'list_documents',

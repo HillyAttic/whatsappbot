@@ -102,6 +102,11 @@ export async function POST(req: NextRequest) {
       } else if (result.interactive.type === 'list') {
         await sendInteractiveList(from, result.interactive.body, result.interactive.buttonText, result.interactive.sections)
       }
+      // Send navigation buttons (Back / Main Menu) as a separate message below the list
+      if (result.navigation && result.navigation.type === 'button') {
+        await sleep(500)
+        await sendInteractiveButtons(from, result.navigation.body, result.navigation.buttons)
+      }
     } else if (result.documents && result.documents.length > 0) {
       for (let i = 0; i < result.documents.length; i++) {
         if (i > 0) await sleep(1000)
