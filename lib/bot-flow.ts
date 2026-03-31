@@ -12,29 +12,45 @@ export interface BotSession {
   expiresAt: string
 }
 
+export type InteractivePayload =
+  | {
+      type: 'button'
+      body: string
+      buttons: { id: string; title: string }[]
+    }
+  | {
+      type: 'list'
+      body: string
+      buttonText: string
+      sections: {
+        title: string
+        rows: { id: string; title: string; description?: string }[]
+      }[]
+    }
+
 export interface FlowResult {
   message: string
   document?: { url: string; filename: string; caption: string }
+  interactive?: InteractivePayload
   session: BotSession | null
 }
 
+// ---------------------------------------------------------------------------
+// Flow message body text (descriptive only — no numbered lists)
+// ---------------------------------------------------------------------------
 const FLOW_MESSAGES = {
   user_not_found:
     'Hello \u{1F44B}\n\nWe could not find your account in our system.\n\nPlease contact support or register to access your documents.',
   category_selection:
-    'Hello \u{1F44B}\n\nWelcome to JPCO Client Document Service.\n\nPlease select a document category:\n\n1\uFE0F\u20E3 Audit Report\n2\uFE0F\u20E3 Financial Statements\n3\uFE0F\u20E3 GST Documents\n4\uFE0F\u20E3 Income Tax Documents\n5\uFE0F\u20E3 Other Documents\n\nReply with the number to continue.',
-  audit_year:
-    'You selected: Audit Report \u{1F4CA}\n\nPlease select Financial Year:\n\n1\uFE0F\u20E3 FY 2021-22\n2\uFE0F\u20E3 FY 2022-23\n3\uFE0F\u20E3 FY 2023-24\n4\uFE0F\u20E3 FY 2024-25\n\nReply with the number.\nType *#* to go back.',
+    'Hello \u{1F44B}\n\nWelcome to JPCO Client Document Service.\n\nPlease select a document category:',
+  audit_year: 'You selected: Audit Report \u{1F4CA}\n\nPlease select Financial Year:',
   financial_year:
-    'You selected: Financial Statements \u{1F4CA}\n\nPlease select Financial Year:\n\n1\uFE0F\u20E3 FY 2022-23\n2\uFE0F\u20E3 FY 2023-24\n3\uFE0F\u20E3 FY 2024-25\n\nReply with the number.\nType *#* to go back.',
-  gst_year:
-    'You selected: GST Documents \u{1F4CA}\n\nPlease select Financial Year:\n\n1\uFE0F\u20E3 FY 2022-23\n2\uFE0F\u20E3 FY 2023-24\n3\uFE0F\u20E3 FY 2024-25\n4\uFE0F\u20E3 FY 2025-26\n\nReply with the number.\nType *#* to go back.',
-  gst_type:
-    'Please select document type:\n\n1\uFE0F\u20E3 GSTR-1\n2\uFE0F\u20E3 GSTR-3B\n\nReply with the number.\nType *#* to go back.',
+    'You selected: Financial Statements \u{1F4CA}\n\nPlease select Financial Year:',
+  gst_year: 'You selected: GST Documents \u{1F4CA}\n\nPlease select Financial Year:',
+  gst_type: 'Please select document type:',
   income_tax_year:
-    'You selected: Income Tax Documents \u{1F4C4}\n\nPlease select Financial Year:\n\n1\uFE0F\u20E3 FY 2022-23\n2\uFE0F\u20E3 FY 2023-24\n3\uFE0F\u20E3 FY 2024-25\n\nReply with the number.\nType *#* to go back.',
-  income_tax_type:
-    'Please select document type:\n\n1\uFE0F\u20E3 ITR\n2\uFE0F\u20E3 Acknowledgement\n3\uFE0F\u20E3 Computation\n\nReply with the number.\nType *#* to go back.',
+    'You selected: Income Tax Documents \u{1F4C4}\n\nPlease select Financial Year:',
+  income_tax_type: 'Please select document type:',
   no_documents:
     'No documents found for the selected option.\n\nPlease try another category or year.',
   invalid_input:
@@ -43,6 +59,120 @@ const FLOW_MESSAGES = {
   back: 'Going back...',
   no_back: 'You are already at the main menu. Please select an option above.',
 } as const
+
+// ---------------------------------------------------------------------------
+// Interactive payload builders for each step
+// ---------------------------------------------------------------------------
+const STEP_INTERACTIVE: Record<string, InteractivePayload> = {
+  category_selection: {
+    type: 'list',
+    body: FLOW_MESSAGES.category_selection,
+    buttonText: 'Select Category',
+    sections: [
+      {
+        title: 'Categories',
+        rows: [
+          { id: '1', title: 'Audit Report' },
+          { id: '2', title: 'Financial Statements' },
+          { id: '3', title: 'GST Documents' },
+          { id: '4', title: 'Income Tax Documents' },
+          { id: '5', title: 'Other Documents' },
+        ],
+      },
+    ],
+  },
+  audit_year: {
+    type: 'list',
+    body: FLOW_MESSAGES.audit_year,
+    buttonText: 'Select Year',
+    sections: [
+      {
+        title: 'Financial Years',
+        rows: [
+          { id: '1', title: 'FY 2021-22' },
+          { id: '2', title: 'FY 2022-23' },
+          { id: '3', title: 'FY 2023-24' },
+          { id: '4', title: 'FY 2024-25' },
+          { id: 'back', title: '\u2B05 Back' },
+        ],
+      },
+    ],
+  },
+  financial_year: {
+    type: 'list',
+    body: FLOW_MESSAGES.financial_year,
+    buttonText: 'Select Year',
+    sections: [
+      {
+        title: 'Financial Years',
+        rows: [
+          { id: '1', title: 'FY 2022-23' },
+          { id: '2', title: 'FY 2023-24' },
+          { id: '3', title: 'FY 2024-25' },
+          { id: 'back', title: '\u2B05 Back' },
+        ],
+      },
+    ],
+  },
+  gst_year: {
+    type: 'list',
+    body: FLOW_MESSAGES.gst_year,
+    buttonText: 'Select Year',
+    sections: [
+      {
+        title: 'Financial Years',
+        rows: [
+          { id: '1', title: 'FY 2022-23' },
+          { id: '2', title: 'FY 2023-24' },
+          { id: '3', title: 'FY 2024-25' },
+          { id: '4', title: 'FY 2025-26' },
+          { id: 'back', title: '\u2B05 Back' },
+        ],
+      },
+    ],
+  },
+  gst_type: {
+    type: 'button',
+    body: FLOW_MESSAGES.gst_type,
+    buttons: [
+      { id: '1', title: 'GSTR-1' },
+      { id: '2', title: 'GSTR-3B' },
+      { id: 'back', title: '\u2B05 Back' },
+    ],
+  },
+  income_tax_year: {
+    type: 'list',
+    body: FLOW_MESSAGES.income_tax_year,
+    buttonText: 'Select Year',
+    sections: [
+      {
+        title: 'Financial Years',
+        rows: [
+          { id: '1', title: 'FY 2022-23' },
+          { id: '2', title: 'FY 2023-24' },
+          { id: '3', title: 'FY 2024-25' },
+          { id: 'back', title: '\u2B05 Back' },
+        ],
+      },
+    ],
+  },
+  income_tax_type: {
+    type: 'list',
+    body: FLOW_MESSAGES.income_tax_type,
+    buttonText: 'Select Type',
+    sections: [
+      {
+        title: 'Document Types',
+        rows: [
+          { id: '1', title: 'ITR' },
+          { id: '2', title: 'Acknowledgement' },
+          { id: '3', title: 'Computation' },
+          { id: 'back', title: '\u2B05 Back' },
+        ],
+      },
+    ],
+  },
+}
 
 // Maps category_selection input → { step, category }
 const CATEGORY_MAP: Record<string, { step: string; category: string }> = {
@@ -122,15 +252,47 @@ function goBack(session: BotSession): { step: string; session: BotSession } | nu
 }
 
 /**
+ * Build a FlowResult that includes the interactive payload for a given step.
+ */
+function buildStepResult(step: string, session: BotSession, prefixMessage?: string): FlowResult {
+  const interactive = STEP_INTERACTIVE[step]
+  const body = interactive ? ('body' in interactive ? interactive.body : '') : ''
+  const message = prefixMessage ? prefixMessage + '\n\n' + body : body
+
+  return {
+    message,
+    interactive: interactive ?? undefined,
+    session,
+  }
+}
+
+/**
+ * Truncate a string to a max length, appending "…" if truncated.
+ */
+function truncate(str: string, max: number): string {
+  return str.length <= max ? str : str.slice(0, max - 1) + '…'
+}
+
+/**
  * Process an incoming message and return the response + updated session.
  * User verification is handled by the caller — this function is only called for verified users.
+ *
+ * @param interactiveReplyId - The button/list reply ID from an interactive message tap.
  */
 export async function processMessage(
   phone: string,
   text: string,
-  session: BotSession | null
+  session: BotSession | null,
+  interactiveReplyId?: string
 ): Promise<FlowResult> {
-  const input = text.toLowerCase().trim()
+  // If an interactive reply ID is present, use it as the effective input.
+  // "back" maps to "#" so the existing back-handling logic works.
+  let input: string
+  if (interactiveReplyId) {
+    input = interactiveReplyId === 'back' ? '#' : interactiveReplyId.toLowerCase().trim()
+  } else {
+    input = text.toLowerCase().trim()
+  }
 
   // Ensure stepHistory exists for legacy sessions
   if (session && !session.stepHistory) {
@@ -139,18 +301,16 @@ export async function processMessage(
 
   // "hi" / "hello" → start fresh with category menu
   if (input === 'hi' || input === 'hello') {
-    return {
-      message: FLOW_MESSAGES.category_selection,
-      session: createSession('category_selection'),
-    }
+    return buildStepResult('category_selection', createSession('category_selection'))
   }
 
   // "0" → restart to category menu
   if (input === '0' && session) {
-    return {
-      message: FLOW_MESSAGES.restart + '\n\n' + FLOW_MESSAGES.category_selection,
-      session: createSession('category_selection'),
-    }
+    return buildStepResult(
+      'category_selection',
+      createSession('category_selection'),
+      FLOW_MESSAGES.restart
+    )
   }
 
   // "back" / "#" → go back to previous step
@@ -163,20 +323,17 @@ export async function processMessage(
     const backStep = result.step
     const backSession = result.session
 
-    // Return the appropriate message for the step we're going back to
-    const stepMessage = FLOW_MESSAGES[backStep as keyof typeof FLOW_MESSAGES]
-    if (stepMessage) {
-      return {
-        message: FLOW_MESSAGES.back + '\n\n' + stepMessage,
-        session: backSession,
-      }
+    // If the step has a known interactive payload, return it
+    if (STEP_INTERACTIVE[backStep]) {
+      return buildStepResult(backStep, backSession, FLOW_MESSAGES.back)
     }
 
     // If going back to a fetch step (like other_docs), go to category instead
-    return {
-      message: FLOW_MESSAGES.back + '\n\n' + FLOW_MESSAGES.category_selection,
-      session: createSession('category_selection'),
-    }
+    return buildStepResult(
+      'category_selection',
+      createSession('category_selection'),
+      FLOW_MESSAGES.back
+    )
   }
 
   // No active session
@@ -206,10 +363,7 @@ export async function processMessage(
 
     const newSession = pushStep(session, selected.step)
     newSession.category = selected.category
-    return {
-      message: FLOW_MESSAGES[selected.step as keyof typeof FLOW_MESSAGES],
-      session: newSession,
-    }
+    return buildStepResult(selected.step, newSession)
   }
 
   // Year selection steps
@@ -228,10 +382,7 @@ export async function processMessage(
     }
 
     // Otherwise show sub-category menu
-    return {
-      message: FLOW_MESSAGES[yearEntry.nextStep as keyof typeof FLOW_MESSAGES],
-      session: updatedSession,
-    }
+    return buildStepResult(yearEntry.nextStep, updatedSession)
   }
 
   // Sub-category selection steps
@@ -296,22 +447,46 @@ async function fetchAndListDocuments(
     )
 
     if (documents.length === 0) {
-      return {
-        message: FLOW_MESSAGES.no_documents,
-        session: createSession('category_selection'),
-      }
+      return buildStepResult(
+        'category_selection',
+        createSession('category_selection'),
+        FLOW_MESSAGES.no_documents
+      )
     }
 
-    const lines = documents.map((doc, i) => `${i + 1}. ${doc.title}`)
-    const message =
-      'Here are your documents:\n\n' + lines.join('\n') + '\n\nReply with the number to download.\nType *#* to go back.'
+    // Cap at 9 documents (+ 1 back row = 10 max rows for WhatsApp list)
+    const cappedDocs = documents.slice(0, 9)
+
+    const rows = cappedDocs.map((doc, i) => ({
+      id: String(i + 1),
+      title: truncate(doc.title, 24),
+    }))
+
+    // Add back row
+    rows.push({ id: 'back', title: '\u2B05 Back' })
+
+    const bodyText =
+      'Here are your documents \u{1F4C2}\n\nTap a document to download.'
+
+    const interactive: InteractivePayload = {
+      type: 'list',
+      body: bodyText,
+      buttonText: 'View Documents',
+      sections: [
+        {
+          title: 'Documents',
+          rows,
+        },
+      ],
+    }
 
     return {
-      message,
+      message: bodyText,
+      interactive,
       session: {
         ...session,
         currentStep: 'list_documents',
-        documentList: documents,
+        documentList: cappedDocs,
       },
     }
   } catch (error) {

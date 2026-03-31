@@ -19,20 +19,42 @@ export interface Document {
 /**
  * Parse incoming WhatsApp webhook payload
  */
-export function parseWebhookPayload(body: any): { from: string; text: string } | null {
+export function parseWebhookPayload(
+  body: any
+): { from: string; text: string; interactiveReplyId?: string } | null {
   try {
     const entry = body?.entry?.[0]
     const change = entry?.changes?.[0]
     const message = change?.value?.messages?.[0]
 
-    if (!message || message.type !== 'text') {
-      return null
+    if (!message) return null
+
+    if (message.type === 'text') {
+      return {
+        from: message.from,
+        text: message.text.body,
+      }
     }
 
-    return {
-      from: message.from,
-      text: message.text.body,
+    if (message.type === 'interactive') {
+      const interactive = message.interactive
+      if (interactive?.type === 'button_reply') {
+        return {
+          from: message.from,
+          text: interactive.button_reply.title,
+          interactiveReplyId: interactive.button_reply.id,
+        }
+      }
+      if (interactive?.type === 'list_reply') {
+        return {
+          from: message.from,
+          text: interactive.list_reply.title,
+          interactiveReplyId: interactive.list_reply.id,
+        }
+      }
     }
+
+    return null
   } catch {
     return null
   }

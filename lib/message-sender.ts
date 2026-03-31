@@ -95,3 +95,55 @@ export async function sendDocument(
     },
   })
 }
+
+/**
+ * Sends an interactive reply-button message (max 3 buttons).
+ */
+export async function sendInteractiveButtons(
+  to: string,
+  body: string,
+  buttons: Array<{ id: string; title: string }>
+): Promise<void> {
+  await sendWhatsAppRequest({
+    messaging_product: 'whatsapp',
+    to,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      body: { text: body },
+      action: {
+        buttons: buttons.map((b) => ({
+          type: 'reply',
+          reply: { id: b.id, title: b.title },
+        })),
+      },
+    },
+  })
+}
+
+/**
+ * Sends an interactive list message (for 4+ options).
+ */
+export async function sendInteractiveList(
+  to: string,
+  body: string,
+  buttonText: string,
+  sections: Array<{
+    title: string
+    rows: Array<{ id: string; title: string; description?: string }>
+  }>
+): Promise<void> {
+  await sendWhatsAppRequest({
+    messaging_product: 'whatsapp',
+    to,
+    type: 'interactive',
+    interactive: {
+      type: 'list',
+      body: { text: body },
+      action: {
+        button: buttonText,
+        sections,
+      },
+    },
+  })
+}
