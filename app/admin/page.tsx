@@ -44,6 +44,7 @@ export default function AdminPage() {
   const [deletingDoc, setDeletingDoc] = useState<Document | null>(null)
   const [uploadPreset, setUploadPreset] = useState<{ category: string; fiscalYear: string | null; subCategory: string | null } | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState('')
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
 
@@ -145,30 +146,44 @@ export default function AdminPage() {
     }
   }
 
-  const handleCreateDocument = async (data: { title: string; file: File | null; category: string; fiscalYear: string | null; subCategory: string | null }) => {
-    if (!selectedClient || !data.file) return
+  const handleCreateDocument = async (data: { title: string; file: File | null; files: File[]; category: string; fiscalYear: string | null; subCategory: string | null }) => {
+    if (!selectedClient) return
+    const filesToUpload = data.files.length > 0 ? data.files : data.file ? [data.file] : []
+    if (filesToUpload.length === 0) return
+    const isMulti = filesToUpload.length > 1
     try {
       setUploading(true)
-      const formData = new FormData()
-      formData.append('title', data.title)
-      formData.append('file', data.file)
-      formData.append('category', data.category)
-      if (data.fiscalYear) formData.append('fiscalYear', data.fiscalYear)
-      if (data.subCategory) formData.append('subCategory', data.subCategory)
-      const res = await fetch('/api/admin/clients/' + selectedClient.id + '/documents', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: formData,
-      })
-      if (!res.ok) throw new Error('Failed')
+      let failed = 0
+      for (let i = 0; i < filesToUpload.length; i++) {
+        const file = filesToUpload[i]
+        if (isMulti) setUploadProgress(`Uploading ${i + 1} of ${filesToUpload.length}...`)
+        const fileTitle = isMulti ? file.name.replace(/\.[^/.]+$/, '') : data.title
+        const formData = new FormData()
+        formData.append('title', fileTitle)
+        formData.append('file', file)
+        formData.append('category', data.category)
+        if (data.fiscalYear) formData.append('fiscalYear', data.fiscalYear)
+        if (data.subCategory) formData.append('subCategory', data.subCategory)
+        const res = await fetch('/api/admin/clients/' + selectedClient.id + '/documents', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: formData,
+        })
+        if (!res.ok) failed++
+      }
       setDocModal(null)
       setUploadPreset(null)
       await loadDocuments(selectedClient.id)
-      showToast('Document uploaded')
+      if (failed > 0) {
+        showToast(`${filesToUpload.length - failed} uploaded, ${failed} failed`, 'error')
+      } else {
+        showToast(isMulti ? `${filesToUpload.length} documents uploaded` : 'Document uploaded')
+      }
     } catch (error) {
-      showToast('Failed to upload document', 'error')
+      showToast('Failed to upload documents', 'error')
     } finally {
       setUploading(false)
+      setUploadProgress('')
     }
   }
 
@@ -323,7 +338,7 @@ export default function AdminPage() {
           <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-modal animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-display font-semibold text-ink mb-5">{docModal === 'create' ? 'Upload Document' : 'Edit Document'}</h3>
             {uploading ? (
-              <div className="py-8 text-center"><div className="animate-spin rounded-full h-8 w-8 border-2 border-accent border-t-transparent mx-auto mb-3" /><p className="text-sm text-ink-muted">Uploading...</p></div>
+              <div className="py-8 text-center"><div className="animate-spin rounded-full h-8 w-8 border-2 border-accent border-t-transparent mx-auto mb-3" /><p className="text-sm text-ink-muted">{uploadProgress || 'Uploading...'}</p></div>
             ) : (
               <DocumentForm
                 initial={editingDoc || undefined}
