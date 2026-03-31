@@ -31,7 +31,9 @@ export type InteractivePayload =
 export interface FlowResult {
   message: string
   document?: { url: string; filename: string; caption: string }
+  documents?: { url: string; filename: string; caption: string }[]
   interactive?: InteractivePayload
+  followUp?: InteractivePayload
   session: BotSession | null
 }
 
@@ -94,6 +96,7 @@ const STEP_INTERACTIVE: Record<string, InteractivePayload> = {
           { id: '3', title: 'FY 2023-24' },
           { id: '4', title: 'FY 2024-25' },
           { id: 'back', title: '\u2B05 Back' },
+          { id: 'main_menu', title: 'Main Menu' },
         ],
       },
     ],
@@ -110,6 +113,7 @@ const STEP_INTERACTIVE: Record<string, InteractivePayload> = {
           { id: '2', title: 'FY 2023-24' },
           { id: '3', title: 'FY 2024-25' },
           { id: 'back', title: '\u2B05 Back' },
+          { id: 'main_menu', title: 'Main Menu' },
         ],
       },
     ],
@@ -127,17 +131,25 @@ const STEP_INTERACTIVE: Record<string, InteractivePayload> = {
           { id: '3', title: 'FY 2024-25' },
           { id: '4', title: 'FY 2025-26' },
           { id: 'back', title: '\u2B05 Back' },
+          { id: 'main_menu', title: 'Main Menu' },
         ],
       },
     ],
   },
   gst_type: {
-    type: 'button',
+    type: 'list',
     body: FLOW_MESSAGES.gst_type,
-    buttons: [
-      { id: '1', title: 'GSTR-1' },
-      { id: '2', title: 'GSTR-3B' },
-      { id: 'back', title: '\u2B05 Back' },
+    buttonText: 'Select Type',
+    sections: [
+      {
+        title: 'Document Types',
+        rows: [
+          { id: '1', title: 'GSTR-1' },
+          { id: '2', title: 'GSTR-3B' },
+          { id: 'back', title: '\u2B05 Back' },
+          { id: 'main_menu', title: 'Main Menu' },
+        ],
+      },
     ],
   },
   income_tax_year: {
@@ -152,6 +164,7 @@ const STEP_INTERACTIVE: Record<string, InteractivePayload> = {
           { id: '2', title: 'FY 2023-24' },
           { id: '3', title: 'FY 2024-25' },
           { id: 'back', title: '\u2B05 Back' },
+          { id: 'main_menu', title: 'Main Menu' },
         ],
       },
     ],
@@ -164,10 +177,12 @@ const STEP_INTERACTIVE: Record<string, InteractivePayload> = {
       {
         title: 'Document Types',
         rows: [
+          { id: 'download_all', title: 'Download All' },
           { id: '1', title: 'ITR' },
           { id: '2', title: 'Acknowledgement' },
           { id: '3', title: 'Computation' },
           { id: 'back', title: '\u2B05 Back' },
+          { id: 'main_menu', title: 'Main Menu' },
         ],
       },
     ],
@@ -274,6 +289,17 @@ function truncate(str: string, max: number): string {
 }
 
 /**
+ * Build a follow-up interactive payload shown after document(s) are sent.
+ */
+function buildFollowUp(): InteractivePayload {
+  return {
+    type: 'button',
+    body: 'Your document has been sent successfully!\n\nWould you like to download another document?',
+    buttons: [{ id: 'select_category', title: 'Select Category' }],
+  }
+}
+
+/**
  * Process an incoming message and return the response + updated session.
  * User verification is handled by the caller — this function is only called for verified users.
  *
@@ -304,8 +330,8 @@ export async function processMessage(
     return buildStepResult('category_selection', createSession('category_selection'))
   }
 
-  // "0" → restart to category menu
-  if (input === '0' && session) {
+  // "0" / "main_menu" / "select_category" → restart to category menu
+  if ((input === '0' || input === 'main_menu' || input === 'select_category') && session) {
     return buildStepResult(
       'category_selection',
       createSession('category_selection'),
@@ -387,6 +413,46 @@ export async function processMessage(
 
   // Sub-category selection steps
   if (SUB_CATEGORY_MAP[step]) {
+    // Download All for income tax — fetch docs across all sub-categories
+    if (input === 'download_all' && step === 'income_tax_type') {
+      try {
+        const documents = await getFilteredDocuments(
+          phone,
+          session.category!,
+          session.fiscalYear
+        )
+
+        if (documents.length === 0) {
+          return buildStepResult(
+            'category_selection',
+            createSession('category_selection'),
+            FLOW_MESSAGES.no_documents
+          )
+        }
+
+        const signedDocs = await Promise.all(
+          documents.map(async (d) => {
+            const url = await generateSignedUrl(d.filePath)
+            const filename = d.filePath.split('/').pop() || d.title
+            return { url, filename, caption: `Here is your document \u{1F4C4}\n\n${d.title}` }
+          })
+        )
+
+        return {
+          message: '',
+          documents: signedDocs,
+          followUp: buildFollowUp(),
+          session,
+        }
+      } catch (error) {
+        console.error('Error fetching all income tax documents:', error)
+        return {
+          message: 'Something went wrong while fetching your documents. Please try again later.',
+          session: createSession('category_selection'),
+        }
+      }
+    }
+
     const subCat = SUB_CATEGORY_MAP[step][input]
     if (!subCat) {
       return { message: FLOW_MESSAGES.invalid_input, session }
@@ -400,6 +466,32 @@ export async function processMessage(
 
   // Document list — user picks a number to download
   if (step === 'list_documents' && session.documentList) {
+    // Download All documents in the current list
+    if (input === 'download_all_docs') {
+      try {
+        const docs = session.documentList
+        const signedDocs = await Promise.all(
+          docs.map(async (d) => {
+            const url = await generateSignedUrl(d.filePath)
+            const filename = d.filePath.split('/').pop() || d.title
+            return { url, filename, caption: `Here is your document \u{1F4C4}\n\n${d.title}` }
+          })
+        )
+        return {
+          message: '',
+          documents: signedDocs,
+          followUp: buildFollowUp(),
+          session,
+        }
+      } catch (error) {
+        console.error('Error generating signed URLs for download all:', error)
+        return {
+          message: 'Unable to retrieve documents. Please try again later.',
+          session,
+        }
+      }
+    }
+
     const num = parseInt(input, 10)
     if (isNaN(num) || num < 1 || num > session.documentList.length) {
       return { message: FLOW_MESSAGES.invalid_input, session }
@@ -416,6 +508,7 @@ export async function processMessage(
           filename,
           caption: `Here is your document \u{1F4C4}\n\n${doc.title}`,
         },
+        followUp: buildFollowUp(),
         session,
       }
     } catch (error) {
@@ -454,16 +547,23 @@ async function fetchAndListDocuments(
       )
     }
 
-    // Cap at 9 documents (+ 1 back row = 10 max rows for WhatsApp list)
-    const cappedDocs = documents.slice(0, 9)
+    // Cap at 7 documents (+ Download All + Back + Main Menu = 10 max rows for WhatsApp list)
+    const cappedDocs = documents.slice(0, 7)
 
-    const rows = cappedDocs.map((doc, i) => ({
-      id: String(i + 1),
-      title: truncate(doc.title, 24),
-    }))
+    const rows: { id: string; title: string }[] = []
 
-    // Add back row
+    // Add Download All when there are multiple documents
+    if (cappedDocs.length > 1) {
+      rows.push({ id: 'download_all_docs', title: 'Download All' })
+    }
+
+    cappedDocs.forEach((doc, i) => {
+      rows.push({ id: String(i + 1), title: truncate(doc.title, 24) })
+    })
+
+    // Add navigation rows
     rows.push({ id: 'back', title: '\u2B05 Back' })
+    rows.push({ id: 'main_menu', title: 'Main Menu' })
 
     const bodyText =
       'Here are your documents \u{1F4C2}\n\nTap a document to download.'

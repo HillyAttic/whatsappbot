@@ -1,7 +1,7 @@
 const MAX_RETRIES = 3
 const BASE_DELAY_MS = 500
 
-function sleep(ms: number): Promise<void> {
+export function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 

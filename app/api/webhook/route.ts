@@ -10,7 +10,7 @@ import {
   saveBotSession,
 } from '@/lib/document-service'
 import { normalizePhone } from '@/lib/phone'
-import { sendMessage, sendDocument, sendInteractiveButtons, sendInteractiveList } from '@/lib/message-sender'
+import { sendMessage, sendDocument, sendInteractiveButtons, sendInteractiveList, sleep } from '@/lib/message-sender'
 import { processMessage } from '@/lib/bot-flow'
 
 /**
@@ -95,17 +95,33 @@ export async function POST(req: NextRequest) {
       await saveBotSession(normalizedPhone, result.session)
     }
 
-    // Send response — prioritise interactive, then document, then plain text
+    // Send response — prioritise interactive, then documents, then document, then plain text
     if (result.interactive) {
       if (result.interactive.type === 'button') {
         await sendInteractiveButtons(from, result.interactive.body, result.interactive.buttons)
       } else if (result.interactive.type === 'list') {
         await sendInteractiveList(from, result.interactive.body, result.interactive.buttonText, result.interactive.sections)
       }
+    } else if (result.documents && result.documents.length > 0) {
+      for (let i = 0; i < result.documents.length; i++) {
+        if (i > 0) await sleep(1000)
+        const doc = result.documents[i]
+        await sendDocument(from, doc.url, doc.filename, doc.caption)
+      }
     } else if (result.document) {
       await sendDocument(from, result.document.url, result.document.filename, result.document.caption)
-    } else {
+    } else if (result.message) {
       await sendMessage(from, result.message)
+    }
+
+    // Send follow-up interactive message after document(s) if present
+    if (result.followUp) {
+      await sleep(1500)
+      if (result.followUp.type === 'button') {
+        await sendInteractiveButtons(from, result.followUp.body, result.followUp.buttons)
+      } else if (result.followUp.type === 'list') {
+        await sendInteractiveList(from, result.followUp.body, result.followUp.buttonText, result.followUp.sections)
+      }
     }
     return NextResponse.json({ status: 'ok' }, { status: 200 })
   } catch (error) {
