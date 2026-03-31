@@ -34,7 +34,6 @@ export interface FlowResult {
   documents?: { url: string; filename: string; caption: string }[]
   interactive?: InteractivePayload
   followUp?: InteractivePayload
-  navigation?: InteractivePayload
   session: BotSession | null
 }
 
@@ -62,6 +61,17 @@ const FLOW_MESSAGES = {
   back: 'Going back...',
   no_back: 'You are already at the main menu. Please select an option above.',
 } as const
+
+// ---------------------------------------------------------------------------
+// Reusable navigation section for list menus (Back + Main Menu)
+// ---------------------------------------------------------------------------
+const NAV_SECTION = {
+  title: 'Navigation',
+  rows: [
+    { id: 'back', title: 'Back' },
+    { id: 'main_menu', title: 'Main Menu' },
+  ],
+}
 
 // ---------------------------------------------------------------------------
 // Interactive payload builders for each step
@@ -98,6 +108,7 @@ const STEP_INTERACTIVE: Record<string, InteractivePayload> = {
           { id: '4', title: 'FY 2024-25' },
         ],
       },
+      NAV_SECTION,
     ],
   },
   financial_year: {
@@ -113,6 +124,7 @@ const STEP_INTERACTIVE: Record<string, InteractivePayload> = {
           { id: '3', title: 'FY 2024-25' },
         ],
       },
+      NAV_SECTION,
     ],
   },
   gst_year: {
@@ -129,6 +141,7 @@ const STEP_INTERACTIVE: Record<string, InteractivePayload> = {
           { id: '4', title: 'FY 2025-26' },
         ],
       },
+      NAV_SECTION,
     ],
   },
   gst_type: {
@@ -143,6 +156,7 @@ const STEP_INTERACTIVE: Record<string, InteractivePayload> = {
           { id: '2', title: 'GSTR-3B' },
         ],
       },
+      NAV_SECTION,
     ],
   },
   income_tax_year: {
@@ -158,6 +172,7 @@ const STEP_INTERACTIVE: Record<string, InteractivePayload> = {
           { id: '3', title: 'FY 2024-25' },
         ],
       },
+      NAV_SECTION,
     ],
   },
   income_tax_type: {
@@ -174,6 +189,7 @@ const STEP_INTERACTIVE: Record<string, InteractivePayload> = {
           { id: '3', title: 'Computation' },
         ],
       },
+      NAV_SECTION,
     ],
   },
 }
@@ -266,7 +282,6 @@ function buildStepResult(step: string, session: BotSession, prefixMessage?: stri
   return {
     message,
     interactive: interactive ?? undefined,
-    navigation: step !== 'category_selection' ? buildNavigation() : undefined,
     session,
   }
 }
@@ -276,20 +291,6 @@ function buildStepResult(step: string, session: BotSession, prefixMessage?: stri
  */
 function truncate(str: string, max: number): string {
   return str.length <= max ? str : str.slice(0, max - 1) + '…'
-}
-
-/**
- * Build navigation buttons (Back + Main Menu) shown as a separate message below lists.
- */
-function buildNavigation(): InteractivePayload {
-  return {
-    type: 'button',
-    body: 'Navigate:',
-    buttons: [
-      { id: 'back', title: 'Back' },
-      { id: 'main_menu', title: 'Main Menu' },
-    ],
-  }
 }
 
 /**
@@ -551,7 +552,7 @@ async function fetchAndListDocuments(
       )
     }
 
-    // Cap at 7 documents (+ Download All + Back + Main Menu = 10 max rows for WhatsApp list)
+    // Cap at 8 documents (+ Download All = 9 rows in section; nav is a separate section)
     const cappedDocs = documents.slice(0, 7)
 
     const rows: { id: string; title: string }[] = []
@@ -577,13 +578,13 @@ async function fetchAndListDocuments(
           title: 'Documents',
           rows,
         },
+        NAV_SECTION,
       ],
     }
 
     return {
       message: bodyText,
       interactive,
-      navigation: buildNavigation(),
       session: {
         ...session,
         currentStep: 'list_documents',
