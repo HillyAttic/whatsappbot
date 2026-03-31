@@ -79,26 +79,54 @@ export async function getDocuments(phone: string): Promise<Document[]> {
   })) as Document[]
 }
 
-const SESSION_TTL_MS = 30 * 60 * 1000 // 30 minutes
-
-export async function storeSession(phone: string, documents: Document[]): Promise<void> {
+/**
+ * Get documents filtered by category, fiscal year, and sub-category
+ */
+export async function getFilteredDocuments(
+  phone: string,
+  category: string,
+  fiscalYear?: string,
+  subCategory?: string
+): Promise<Document[]> {
   const db = getFirestore()
-  const now = Date.now()
-  await db.collection('sessions').doc(phone).set({
-    documentList: documents,
-    createdAt: new Date(now).toISOString(),
-    expiresAt: new Date(now + SESSION_TTL_MS).toISOString(),
-  })
+  const normalizedPhone = normalizePhone(phone)
+
+  let query = db
+    .collection('documents')
+    .where('phone', '==', normalizedPhone)
+    .where('category', '==', category)
+
+  if (fiscalYear) {
+    query = query.where('fiscalYear', '==', fiscalYear)
+  }
+
+  if (subCategory) {
+    query = query.where('subCategory', '==', subCategory)
+  }
+
+  const snapshot = await query.orderBy('uploadedAt', 'desc').get()
+
+  return snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data(),
+  })) as Document[]
 }
 
-export async function getSession(phone: string): Promise<Document[] | null> {
+import type { BotSession } from './bot-flow'
+
+export async function saveBotSession(phone: string, session: BotSession): Promise<void> {
+  const db = getFirestore()
+  await db.collection('sessions').doc(phone).set(session)
+}
+
+export async function getBotSession(phone: string): Promise<BotSession | null> {
   const db = getFirestore()
   const doc = await db.collection('sessions').doc(phone).get()
   if (!doc.exists) return null
-  const data = doc.data()!
+  const data = doc.data() as BotSession
   if (new Date(data.expiresAt) < new Date()) {
     await doc.ref.delete()
     return null
   }
-  return data.documentList as Document[]
+  return data
 }

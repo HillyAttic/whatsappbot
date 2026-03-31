@@ -6,13 +6,12 @@ import {
   parseWebhookPayload,
   sanitizeMessageBody,
   findUser,
-  getDocuments,
-  storeSession,
-  getSession,
+  getBotSession,
+  saveBotSession,
 } from '@/lib/document-service'
 import { normalizePhone } from '@/lib/phone'
 import { sendMessage } from '@/lib/message-sender'
-import { generateSignedUrl } from '@/lib/storage-service'
+import { processMessage } from '@/lib/bot-flow'
 
 /**
  * GET handler for WhatsApp webhook verification challenge.
@@ -72,67 +71,32 @@ export async function POST(req: NextRequest) {
 
     const { from, text } = parsed
     const normalizedPhone = normalizePhone(from)
-    const sanitizedText = sanitizeMessageBody(text).toLowerCase().trim()
+    const sanitizedText = sanitizeMessageBody(text)
 
     // Look up user
     const user = await findUser(normalizedPhone)
 
     if (!user) {
-      await sendMessage(from, 'You are not registered')
+      await sendMessage(
+        from,
+        'Hello \u{1F44B}\n\nWe could not find your account in our system.\n\nPlease contact support or register to access your documents.'
+      )
       return NextResponse.json({ status: 'ok' }, { status: 200 })
     }
 
-    // Handle "hi" greeting
-    if (sanitizedText === 'hi') {
-      const documents = await getDocuments(normalizedPhone)
+    // Get existing session
+    const session = await getBotSession(normalizedPhone)
 
-      if (documents.length === 0) {
-        await sendMessage(from, 'You have no documents available.')
-        return NextResponse.json({ status: 'ok' }, { status: 200 })
-      }
+    // Process message through bot flow engine
+    const result = await processMessage(normalizedPhone, sanitizedText, session)
 
-      // Store session
-      await storeSession(normalizedPhone, documents)
-
-      // Build numbered list
-      const lines = documents.map((doc, index) => `${index + 1}. ${doc.title}`)
-      lines.push('Reply with a number to get the document link.')
-      const message = lines.join('\n')
-
-      await sendMessage(from, message)
-      return NextResponse.json({ status: 'ok' }, { status: 200 })
+    // Save updated session
+    if (result.session) {
+      await saveBotSession(normalizedPhone, result.session)
     }
 
-    // Handle number selection
-    const numberMatch = sanitizedText.match(/^(\d+)$/)
-    if (numberMatch) {
-      const selectedNumber = parseInt(numberMatch[1], 10)
-      const session = await getSession(normalizedPhone)
-
-      if (!session) {
-        await sendMessage(from, "Please send 'Hi' to start.")
-        return NextResponse.json({ status: 'ok' }, { status: 200 })
-      }
-
-      if (selectedNumber < 1 || selectedNumber > session.length) {
-        await sendMessage(from, 'Invalid selection. Please reply with a number from the list.')
-        return NextResponse.json({ status: 'ok' }, { status: 200 })
-      }
-
-      const document = session[selectedNumber - 1]
-
-      try {
-        const signedUrl = await generateSignedUrl(document.filePath)
-        await sendMessage(from, signedUrl)
-      } catch (error) {
-        console.error('Error generating signed URL:', error)
-        await sendMessage(from, 'Unable to retrieve document. Please try again later.')
-      }
-
-      return NextResponse.json({ status: 'ok' }, { status: 200 })
-    }
-
-    // Unknown message - no response
+    // Send response
+    await sendMessage(from, result.message)
     return NextResponse.json({ status: 'ok' }, { status: 200 })
   } catch (error) {
     console.error('Webhook error:', error)
