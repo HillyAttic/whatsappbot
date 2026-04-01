@@ -146,6 +146,25 @@ export default function AdminPage() {
     }
   }
 
+  const uploadFileViaSignedUrl = async (file: File, filePath: string): Promise<void> => {
+    // Get a signed upload URL from our API
+    const urlRes = await fetch('/api/admin/upload-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ filePath, contentType: file.type }),
+    })
+    if (!urlRes.ok) throw new Error('Failed to get upload URL')
+    const { url } = await urlRes.json()
+
+    // Upload the file directly to Firebase Storage (bypasses Vercel body limit)
+    const uploadRes = await fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type },
+      body: file,
+    })
+    if (!uploadRes.ok) throw new Error('Failed to upload file to storage')
+  }
+
   const handleCreateDocument = async (data: { title: string; file: File | null; files: File[]; category: string; fiscalYear: string | null; subCategory: string | null }) => {
     if (!selectedClient) return
     const filesToUpload = data.files.length > 0 ? data.files : data.file ? [data.file] : []
@@ -158,18 +177,34 @@ export default function AdminPage() {
         const file = filesToUpload[i]
         if (isMulti) setUploadProgress(`Uploading ${i + 1} of ${filesToUpload.length}...`)
         const fileTitle = isMulti ? file.name.replace(/\.[^/.]+$/, '') : data.title
-        const formData = new FormData()
-        formData.append('title', fileTitle)
-        formData.append('file', file)
-        formData.append('category', data.category)
-        if (data.fiscalYear) formData.append('fiscalYear', data.fiscalYear)
-        if (data.subCategory) formData.append('subCategory', data.subCategory)
-        const res = await fetch('/api/admin/clients/' + selectedClient.id + '/documents', {
-          method: 'POST',
-          headers: authHeaders(),
-          body: formData,
-        })
-        if (!res.ok) failed++
+
+        // Build storage path matching server-side buildStoragePath logic
+        const pathParts = ['JPCO Client Documents', selectedClient.name, data.category]
+        if (data.fiscalYear) pathParts.push(data.fiscalYear)
+        if (data.subCategory) pathParts.push(data.subCategory)
+        pathParts.push(file.name)
+        const filePath = pathParts.join('/')
+
+        try {
+          // Upload file directly to Firebase Storage via signed URL
+          await uploadFileViaSignedUrl(file, filePath)
+
+          // Save metadata via API (small JSON body, no file binary)
+          const res = await fetch('/api/admin/clients/' + selectedClient.id + '/documents', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...authHeaders() },
+            body: JSON.stringify({
+              title: fileTitle,
+              filePath,
+              category: data.category,
+              fiscalYear: data.fiscalYear,
+              subCategory: data.subCategory,
+            }),
+          })
+          if (!res.ok) failed++
+        } catch {
+          failed++
+        }
       }
       setDocModal(null)
       setUploadPreset(null)
@@ -191,16 +226,25 @@ export default function AdminPage() {
     if (!selectedClient || !editingDoc) return
     try {
       setUploading(true)
-      const formData = new FormData()
-      formData.append('title', data.title)
-      if (data.file) formData.append('file', data.file)
-      formData.append('category', data.category)
-      formData.append('fiscalYear', data.fiscalYear || '')
-      formData.append('subCategory', data.subCategory || '')
+      let newFilePath: string | undefined
+      if (data.file) {
+        const pathParts = ['JPCO Client Documents', selectedClient.name, data.category]
+        if (data.fiscalYear) pathParts.push(data.fiscalYear)
+        if (data.subCategory) pathParts.push(data.subCategory)
+        pathParts.push(data.file.name)
+        newFilePath = pathParts.join('/')
+        await uploadFileViaSignedUrl(data.file, newFilePath)
+      }
       const res = await fetch('/api/admin/clients/' + selectedClient.id + '/documents/' + editingDoc.id, {
         method: 'PUT',
-        headers: authHeaders(),
-        body: formData,
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({
+          title: data.title,
+          filePath: newFilePath,
+          category: data.category,
+          fiscalYear: data.fiscalYear,
+          subCategory: data.subCategory,
+        }),
       })
       if (!res.ok) throw new Error('Failed')
       setEditingDoc(null)

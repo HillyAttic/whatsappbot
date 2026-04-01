@@ -8,6 +8,7 @@ export interface BotSession {
   fiscalYear?: string
   subCategory?: string
   documentList?: Document[]
+  fullDocumentList?: Document[]
   createdAt: string
   expiresAt: string
 }
@@ -474,7 +475,7 @@ export async function processMessage(
     // Download All documents in the current list
     if (input === 'download_all_docs') {
       try {
-        const docs = session.documentList
+        const docs = session.fullDocumentList || session.documentList
         const signedDocs = await Promise.all(
           docs.map(async (d) => {
             const url = await generateSignedUrl(d.filePath)
@@ -589,6 +590,7 @@ async function fetchAndListDocuments(
         ...session,
         currentStep: 'list_documents',
         documentList: cappedDocs,
+        fullDocumentList: documents,
       },
     }
   } catch (error) {

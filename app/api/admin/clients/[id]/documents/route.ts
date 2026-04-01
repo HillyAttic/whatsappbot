@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getFirestore } from '@/lib/firebase-admin'
-import { uploadFile } from '@/lib/storage-service'
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/auth-middleware'
-import { CATEGORIES, buildStoragePath } from '@/lib/document-categories'
+import { CATEGORIES } from '@/lib/document-categories'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,7 +56,10 @@ export async function GET(
 }
 
 /**
- * POST /api/admin/clients/[id]/documents - Create a new document with file upload
+ * POST /api/admin/clients/[id]/documents - Create a new document.
+ *
+ * Accepts JSON body with metadata. The file should already be uploaded
+ * directly to Firebase Storage via a signed URL from /api/admin/upload-url.
  */
 export async function POST(
   req: NextRequest,
@@ -80,18 +82,12 @@ export async function POST(
     }
 
     const phone = clientDoc.data()?.phone
-    const clientName = clientDoc.data()?.name
 
-    const formData = await req.formData()
-    const title = formData.get('title') as string
-    const file = formData.get('file') as File
-    const category = formData.get('category') as string
-    const fiscalYear = (formData.get('fiscalYear') as string) || null
-    const subCategory = (formData.get('subCategory') as string) || null
+    const { title, filePath, category, fiscalYear, subCategory } = await req.json()
 
-    if (!title || !file) {
+    if (!title || !filePath) {
       return NextResponse.json(
-        { error: 'Title and file are required' },
+        { error: 'Title and filePath are required' },
         { status: 400 }
       )
     }
@@ -118,10 +114,6 @@ export async function POST(
         { status: 400 }
       )
     }
-
-    const fileBuffer = Buffer.from(await file.arrayBuffer())
-    const filePath = buildStoragePath(clientName, category, fiscalYear, subCategory, file.name)
-    await uploadFile(fileBuffer, filePath, file.type)
 
     const docRef = await db.collection('documents').add({
       phone,
