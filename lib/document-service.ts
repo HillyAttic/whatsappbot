@@ -21,7 +21,7 @@ export interface Document {
  */
 export function parseWebhookPayload(
   body: any
-): { from: string; text: string; interactiveReplyId?: string } | null {
+): { from: string; text: string; messageId: string; interactiveReplyId?: string } | null {
   try {
     const entry = body?.entry?.[0]
     const change = entry?.changes?.[0]
@@ -29,9 +29,12 @@ export function parseWebhookPayload(
 
     if (!message) return null
 
+    const messageId = message.id as string
+
     if (message.type === 'text') {
       return {
         from: message.from,
+        messageId,
         text: message.text.body,
       }
     }
@@ -41,6 +44,7 @@ export function parseWebhookPayload(
       if (interactive?.type === 'button_reply') {
         return {
           from: message.from,
+          messageId,
           text: interactive.button_reply.title,
           interactiveReplyId: interactive.button_reply.id,
         }
@@ -48,6 +52,7 @@ export function parseWebhookPayload(
       if (interactive?.type === 'list_reply') {
         return {
           from: message.from,
+          messageId,
           text: interactive.list_reply.title,
           interactiveReplyId: interactive.list_reply.id,
         }

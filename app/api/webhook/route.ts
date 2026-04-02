@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { waitUntil } from '@vercel/functions'
 import { validateSignature } from '@/lib/validate-signature'
 
 export const dynamic = 'force-dynamic'
@@ -12,6 +13,28 @@ import {
 import { normalizePhone } from '@/lib/phone'
 import { sendMessage, sendDocument, sendInteractiveButtons, sendInteractiveList, sleep } from '@/lib/message-sender'
 import { processMessage } from '@/lib/bot-flow'
+
+// In-memory deduplication cache to prevent processing the same message twice
+// (WhatsApp retries webhooks if 200 isn't received fast enough)
+const processedMessages = new Map<string, number>()
+const DEDUP_TTL_MS = 5 * 60 * 1000 // 5 minutes
+
+function isDuplicate(messageId: string): boolean {
+  // Clean up old entries
+  const now = Date.now()
+  for (const [id, timestamp] of processedMessages) {
+    if (now - timestamp > DEDUP_TTL_MS) {
+      processedMessages.delete(id)
+    }
+  }
+
+  if (processedMessages.has(messageId)) {
+    return true
+  }
+
+  processedMessages.set(messageId, now)
+  return false
+}
 
 /**
  * GET handler for WhatsApp webhook verification challenge.
@@ -38,6 +61,7 @@ export async function GET(req: NextRequest) {
 
 /**
  * POST handler for incoming WhatsApp messages.
+ * Returns 200 immediately and processes the message in the background.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -69,6 +93,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: 'ok' }, { status: 200 })
     }
 
+    // Deduplicate — skip if we've already seen this message
+    if (isDuplicate(parsed.messageId)) {
+      console.log(`Skipping duplicate message: ${parsed.messageId}`)
+      return NextResponse.json({ status: 'ok' }, { status: 200 })
+    }
+
+    // Return 200 IMMEDIATELY — process the message in the background
+    // This is critical: WhatsApp expects a fast 200 or it stops sending messages
+    waitUntil(handleMessage(parsed))
+
+    return NextResponse.json({ status: 'ok' }, { status: 200 })
+  } catch (error) {
+    console.error('Webhook error:', error)
+    return NextResponse.json({ status: 'ok' }, { status: 200 })
+  }
+}
+
+/**
+ * Process the incoming message in the background (after 200 is returned).
+ */
+async function handleMessage(parsed: {
+  from: string
+  text: string
+  messageId: string
+  interactiveReplyId?: string
+}) {
+  try {
     const { from, text, interactiveReplyId } = parsed
     const normalizedPhone = normalizePhone(from)
     const sanitizedText = sanitizeMessageBody(text)
@@ -81,7 +132,7 @@ export async function POST(req: NextRequest) {
         from,
         'Hello \u{1F44B}\n\nWe could not find your account in our system.\n\nPlease contact support or register to access your documents.'
       )
-      return NextResponse.json({ status: 'ok' }, { status: 200 })
+      return
     }
 
     // Get existing session
@@ -123,9 +174,7 @@ export async function POST(req: NextRequest) {
         await sendInteractiveList(from, result.followUp.body, result.followUp.buttonText, result.followUp.sections)
       }
     }
-    return NextResponse.json({ status: 'ok' }, { status: 200 })
   } catch (error) {
-    console.error('Webhook error:', error)
-    return NextResponse.json({ status: 'ok' }, { status: 200 })
+    console.error('Error processing message:', error)
   }
 }
