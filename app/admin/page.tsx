@@ -38,6 +38,7 @@ export default function AdminPage() {
   const [clientModal, setClientModal] = useState<ModalMode>(null)
   const [editingClient, setEditingClient] = useState<Client | null>(null)
   const [deletingClient, setDeletingClient] = useState<Client | null>(null)
+  const [creatingClient, setCreatingClient] = useState(false)
 
   const [docModal, setDocModal] = useState<ModalMode>(null)
   const [editingDoc, setEditingDoc] = useState<Document | null>(null)
@@ -95,6 +96,7 @@ export default function AdminPage() {
 
   const handleCreateClient = async (data: { name: string; phone: string }) => {
     try {
+      setCreatingClient(true)
       const res = await fetch('/api/admin/clients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -103,9 +105,11 @@ export default function AdminPage() {
       if (!res.ok) throw new Error('Failed')
       setClientModal(null)
       await loadClients()
-      showToast('Client created')
+      showToast('Client created successfully')
     } catch (error) {
       showToast('Failed to create client', 'error')
+    } finally {
+      setCreatingClient(false)
     }
   }
 
@@ -372,7 +376,7 @@ export default function AdminPage() {
         <div className="fixed inset-0 bg-black/40 modal-backdrop flex items-center justify-center z-50 animate-fade-in" onClick={() => { setClientModal(null); setEditingClient(null) }}>
           <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-modal animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-display font-semibold text-ink mb-5">{clientModal === 'create' ? 'New Client' : 'Edit Client'}</h3>
-            <ClientForm initial={editingClient || undefined} onSubmit={clientModal === 'create' ? handleCreateClient : handleUpdateClient} onCancel={() => { setClientModal(null); setEditingClient(null) }} />
+            <ClientForm initial={editingClient || undefined} onSubmit={clientModal === 'create' ? handleCreateClient : handleUpdateClient} onCancel={() => { setClientModal(null); setEditingClient(null) }} loading={clientModal === 'create' ? creatingClient : false} />
           </div>
         </div>
       )}
