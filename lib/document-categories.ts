@@ -1,21 +1,34 @@
+const ALL_FISCAL_YEARS = [
+  'FY 2021-22', 'FY 2022-23', 'FY 2023-24', 'FY 2024-25',
+  'FY 2025-26', 'FY 2026-27', 'FY 2027-28', 'FY 2028-29', 'FY 2029-30',
+]
+
 export const CATEGORIES: Record<string, { fiscalYears: string[]; subCategories: string[] }> = {
   'Audit Report': {
-    fiscalYears: ['FY 2021-22', 'FY 2022-23', 'FY 2023-24', 'FY 2024-25'],
+    fiscalYears: [...ALL_FISCAL_YEARS],
     subCategories: [],
   },
   'Financial Statements': {
-    fiscalYears: ['FY 2022-23', 'FY 2023-24', 'FY 2024-25'],
+    fiscalYears: [...ALL_FISCAL_YEARS],
     subCategories: [],
   },
   'GST Related Documents': {
-    fiscalYears: ['FY 2022-23', 'FY 2023-24', 'FY 2024-25', 'FY 2025-26'],
+    fiscalYears: [...ALL_FISCAL_YEARS],
     subCategories: ['GSTR-1', 'GSTR-3B'],
   },
   'Income Tax Documents': {
-    fiscalYears: ['FY 2022-23', 'FY 2023-24', 'FY 2024-25'],
+    fiscalYears: [...ALL_FISCAL_YEARS],
     subCategories: ['ITR', 'Acknowledgement', 'Computation'],
   },
   'Incorporation & Other Documents': {
+    fiscalYears: [],
+    subCategories: [],
+  },
+  'TDS reports': {
+    fiscalYears: [...ALL_FISCAL_YEARS],
+    subCategories: [],
+  },
+  'GST user ID and PDF': {
     fiscalYears: [],
     subCategories: [],
   },

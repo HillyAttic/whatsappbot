@@ -176,5 +176,14 @@ async function handleMessage(parsed: {
     }
   } catch (error) {
     console.error('Error processing message:', error)
+    // Send a fallback message so the user isn't left without a response
+    try {
+      await sendMessage(
+        parsed.from,
+        'Something went wrong. Please try again by sending "Hi".'
+      )
+    } catch (sendError) {
+      console.error('Failed to send error fallback message:', sendError)
+    }
   }
 }

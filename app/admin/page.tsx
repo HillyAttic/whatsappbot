@@ -97,6 +97,15 @@ export default function AdminPage() {
       const data = await res.json()
       if (data.categories && Object.keys(data.categories).length > 0) {
         setCategories(data.categories)
+      } else {
+        // Firestore has no categories — seed it with the static defaults
+        // so the WhatsApp bot can read them
+        console.log('No categories in Firestore, seeding with defaults...')
+        await fetch('/api/admin/categories', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body: JSON.stringify({ categories: CATEGORIES }),
+        })
       }
     } catch (error) {
       console.error('Failed to load categories', error)
@@ -466,6 +475,7 @@ export default function AdminPage() {
                 preset={docModal === 'create' ? (uploadPreset || undefined) : undefined}
                 onSubmit={docModal === 'create' ? handleCreateDocument : handleUpdateDocument}
                 onCancel={() => { setDocModal(null); setEditingDoc(null); setUploadPreset(null) }}
+                categoryConfig={categories}
               />
             )}
           </div>

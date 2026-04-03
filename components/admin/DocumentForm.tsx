@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, FormEvent } from 'react'
+import { useState, useEffect, FormEvent } from 'react'
 import { CATEGORIES, CATEGORY_NAMES } from '@/lib/document-categories'
 
 interface DocumentRecord {
@@ -34,9 +34,10 @@ interface DocumentFormProps {
   preset?: UploadPreset
   onSubmit: (data: DocumentFormData) => void
   onCancel: () => void
+  categoryConfig?: Record<string, { fiscalYears: string[]; subCategories: string[] }>
 }
 
-export default function DocumentForm({ initial, preset, onSubmit, onCancel }: DocumentFormProps) {
+export default function DocumentForm({ initial, preset, onSubmit, onCancel, categoryConfig }: DocumentFormProps) {
   const [title, setTitle] = useState(initial?.title || '')
   const [file, setFile] = useState<File | null>(null)
   const [files, setFiles] = useState<File[]>([])
@@ -46,7 +47,11 @@ export default function DocumentForm({ initial, preset, onSubmit, onCancel }: Do
   const [subCategory, setSubCategory] = useState<string>(initial?.subCategory || preset?.subCategory || '')
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({})
 
-  const catConfig = category ? CATEGORIES[category] : null
+  // Use dynamic categories if provided, otherwise fall back to static config
+  const categoriesToUse = categoryConfig || CATEGORIES
+  const categoryNames = Object.keys(categoriesToUse)
+
+  const catConfig = category ? categoriesToUse[category] : null
 
   const handleCategoryChange = (val: string) => {
     setCategory(val)
@@ -117,7 +122,7 @@ export default function DocumentForm({ initial, preset, onSubmit, onCancel }: Do
           className="w-full px-3.5 py-2.5 bg-surface border border-surface-border rounded-lg text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-all"
         >
           <option value="">Select category</option>
-          {CATEGORY_NAMES.map((name) => (
+          {categoryNames.map((name) => (
             <option key={name} value={name}>{name}</option>
           ))}
         </select>

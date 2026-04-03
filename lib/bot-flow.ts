@@ -1,10 +1,11 @@
-import { Document, getFilteredDocuments } from './document-service'
+import { Document, getFilteredDocuments, getCategories } from './document-service'
 import { generateSignedUrl } from './storage-service'
 
 export interface BotSession {
   currentStep: string
   stepHistory: string[]
   category?: string
+  categoryId?: string
   fiscalYear?: string
   subCategory?: string
   documentList?: Document[]
@@ -75,172 +76,213 @@ const NAV_SECTION = {
 }
 
 // ---------------------------------------------------------------------------
-// Interactive payload builders for each step
+// Interactive payload builders for each step (year/sub-cat are built dynamically)
 // ---------------------------------------------------------------------------
 const STEP_INTERACTIVE: Record<string, InteractivePayload> = {
-  category_selection: {
+  audit_year: {
+    type: 'list',
+    body: FLOW_MESSAGES.audit_year,
+    buttonText: 'Select Year',
+    sections: [],
+  },
+  financial_year: {
+    type: 'list',
+    body: FLOW_MESSAGES.financial_year,
+    buttonText: 'Select Year',
+    sections: [],
+  },
+  gst_year: {
+    type: 'list',
+    body: FLOW_MESSAGES.gst_year,
+    buttonText: 'Select Year',
+    sections: [],
+  },
+  gst_type: {
+    type: 'list',
+    body: FLOW_MESSAGES.gst_type,
+    buttonText: 'Select Type',
+    sections: [],
+  },
+  income_tax_year: {
+    type: 'list',
+    body: FLOW_MESSAGES.income_tax_year,
+    buttonText: 'Select Year',
+    sections: [],
+  },
+  income_tax_type: {
+    type: 'list',
+    body: FLOW_MESSAGES.income_tax_type,
+    buttonText: 'Select Type',
+    sections: [],
+  },
+}
+
+/**
+ * Build dynamic category selection menu from Firestore categories
+ */
+async function buildCategorySelection(): Promise<InteractivePayload> {
+  const categories = await getCategories()
+  const rows = Object.keys(categories).map((name, index) => ({
+    id: String(index + 1),
+    title: name,
+  }))
+
+  return {
     type: 'list',
     body: FLOW_MESSAGES.category_selection,
     buttonText: 'Select Category',
     sections: [
       {
         title: 'Categories',
-        rows: [
-          { id: '1', title: 'Audit Report' },
-          { id: '2', title: 'Financial Statements' },
-          { id: '3', title: 'GST Documents' },
-          { id: '4', title: 'Income Tax Documents' },
-          { id: '5', title: 'Other Documents' },
-        ],
+        rows,
       },
     ],
-  },
-  audit_year: {
+  }
+}
+
+/**
+ * Build dynamic year selection menu for a category
+ */
+async function buildYearSelection(
+  step: string,
+  category: string,
+  fiscalYears: string[]
+): Promise<InteractivePayload> {
+  const rows = fiscalYears.map((year, index) => ({
+    id: String(index + 1),
+    title: year,
+  }))
+
+  return {
     type: 'list',
-    body: FLOW_MESSAGES.audit_year,
+    body: FLOW_MESSAGES[step as keyof typeof FLOW_MESSAGES] || `You selected: ${category}\n\nPlease select Financial Year:`,
     buttonText: 'Select Year',
     sections: [
       {
         title: 'Financial Years',
-        rows: [
-          { id: '1', title: 'FY 2021-22' },
-          { id: '2', title: 'FY 2022-23' },
-          { id: '3', title: 'FY 2023-24' },
-          { id: '4', title: 'FY 2024-25' },
-        ],
+        rows,
       },
       NAV_SECTION,
     ],
-  },
-  financial_year: {
+  }
+}
+
+/**
+ * Build dynamic sub-category selection menu for a category
+ */
+async function buildSubCategorySelection(
+  step: string,
+  subCategories: string[]
+): Promise<InteractivePayload> {
+  const rows = subCategories.map((sub, index) => ({
+    id: String(index + 1),
+    title: sub,
+  }))
+
+  // Add Download All for income tax type
+  if (step === 'income_tax_type') {
+    rows.unshift({ id: 'download_all', title: 'Download All' })
+  }
+
+  return {
     type: 'list',
-    body: FLOW_MESSAGES.financial_year,
-    buttonText: 'Select Year',
-    sections: [
-      {
-        title: 'Financial Years',
-        rows: [
-          { id: '1', title: 'FY 2022-23' },
-          { id: '2', title: 'FY 2023-24' },
-          { id: '3', title: 'FY 2024-25' },
-        ],
-      },
-      NAV_SECTION,
-    ],
-  },
-  gst_year: {
-    type: 'list',
-    body: FLOW_MESSAGES.gst_year,
-    buttonText: 'Select Year',
-    sections: [
-      {
-        title: 'Financial Years',
-        rows: [
-          { id: '1', title: 'FY 2022-23' },
-          { id: '2', title: 'FY 2023-24' },
-          { id: '3', title: 'FY 2024-25' },
-          { id: '4', title: 'FY 2025-26' },
-        ],
-      },
-      NAV_SECTION,
-    ],
-  },
-  gst_type: {
-    type: 'list',
-    body: FLOW_MESSAGES.gst_type,
+    body: FLOW_MESSAGES[step as keyof typeof FLOW_MESSAGES] || 'Please select document type:',
     buttonText: 'Select Type',
     sections: [
       {
         title: 'Document Types',
-        rows: [
-          { id: '1', title: 'GSTR-1' },
-          { id: '2', title: 'GSTR-3B' },
-        ],
+        rows,
       },
       NAV_SECTION,
     ],
-  },
-  income_tax_year: {
-    type: 'list',
-    body: FLOW_MESSAGES.income_tax_year,
-    buttonText: 'Select Year',
-    sections: [
-      {
-        title: 'Financial Years',
-        rows: [
-          { id: '1', title: 'FY 2022-23' },
-          { id: '2', title: 'FY 2023-24' },
-          { id: '3', title: 'FY 2024-25' },
-        ],
-      },
-      NAV_SECTION,
-    ],
-  },
-  income_tax_type: {
-    type: 'list',
-    body: FLOW_MESSAGES.income_tax_type,
-    buttonText: 'Select Type',
-    sections: [
-      {
-        title: 'Document Types',
-        rows: [
-          { id: 'download_all', title: 'Download All' },
-          { id: '1', title: 'ITR' },
-          { id: '2', title: 'Acknowledgement' },
-          { id: '3', title: 'Computation' },
-        ],
-      },
-      NAV_SECTION,
-    ],
-  },
+  }
 }
 
-// Maps category_selection input → { step, category }
-const CATEGORY_MAP: Record<string, { step: string; category: string }> = {
-  '1': { step: 'audit_year', category: 'Audit Report' },
-  '2': { step: 'financial_year', category: 'Financial Statements' },
-  '3': { step: 'gst_year', category: 'GST Related Documents' },
-  '4': { step: 'income_tax_year', category: 'Income Tax Documents' },
-  '5': { step: 'other_docs', category: 'Incorporation & Other Documents' },
+// Category mapping is now built dynamically from Firestore categories
+// Format: { '1': { step, category, hasSubCategories } }
+
+/**
+ * Build category map from Firestore categories
+ * Returns a mapping from numeric IDs to category configs
+ */
+async function buildCategoryMap(): Promise<
+  Record<string, { step: string; category: string; hasFiscalYears: boolean; hasSubCategories: boolean }>
+> {
+  const categories = await getCategories()
+  const categoryNames = Object.keys(categories)
+  console.log('[buildCategoryMap] Categories from cache/DB:', categoryNames)
+
+  const map: Record<string, { step: string; category: string; hasFiscalYears: boolean; hasSubCategories: boolean }> = {}
+
+  categoryNames.forEach((name, index) => {
+    const id = String(index + 1)
+    const config = categories[name]
+    const hasFiscalYears = config.fiscalYears.length > 0
+    const hasSubCategories = config.subCategories.length > 0
+
+    console.log(`[buildCategoryMap] Category ${id}: ${name} (FY: ${hasFiscalYears}, Sub: ${hasSubCategories})`)
+
+    // Determine the next step based on configuration
+    let step: string
+    if (!hasFiscalYears && !hasSubCategories) {
+      // No year or sub-category selection needed - fetch directly
+      step = 'fetch_documents_direct'
+    } else if (hasFiscalYears && !hasSubCategories) {
+      // Has fiscal years but no sub-categories
+      step = `${id}_year_selection` // Unique step per category
+    } else if (hasFiscalYears && hasSubCategories) {
+      // Has both fiscal years and sub-categories
+      step = `${id}_year_selection`
+    } else {
+      // No fiscal years but has sub-categories (unlikely but handle it)
+      step = `${id}_sub_selection`
+    }
+
+    map[id] = {
+      step,
+      category: name,
+      hasFiscalYears,
+      hasSubCategories,
+    }
+  })
+
+  console.log('[buildCategoryMap] Built map:', Object.keys(map))
+  return map
 }
 
-// Maps year-selection steps → valid inputs → fiscal year
-const YEAR_MAP: Record<string, Record<string, { year: string; nextStep: string }>> = {
-  audit_year: {
-    '1': { year: 'FY 2021-22', nextStep: 'fetch_documents' },
-    '2': { year: 'FY 2022-23', nextStep: 'fetch_documents' },
-    '3': { year: 'FY 2023-24', nextStep: 'fetch_documents' },
-    '4': { year: 'FY 2024-25', nextStep: 'fetch_documents' },
-  },
-  financial_year: {
-    '1': { year: 'FY 2022-23', nextStep: 'fetch_documents' },
-    '2': { year: 'FY 2023-24', nextStep: 'fetch_documents' },
-    '3': { year: 'FY 2024-25', nextStep: 'fetch_documents' },
-  },
-  gst_year: {
-    '1': { year: 'FY 2022-23', nextStep: 'gst_type' },
-    '2': { year: 'FY 2023-24', nextStep: 'gst_type' },
-    '3': { year: 'FY 2024-25', nextStep: 'gst_type' },
-    '4': { year: 'FY 2025-26', nextStep: 'gst_type' },
-  },
-  income_tax_year: {
-    '1': { year: 'FY 2022-23', nextStep: 'income_tax_type' },
-    '2': { year: 'FY 2023-24', nextStep: 'income_tax_type' },
-    '3': { year: 'FY 2024-25', nextStep: 'income_tax_type' },
-  },
+/**
+ * Build year map for a specific category
+ */
+function buildYearMapForCategory(
+  categoryId: string,
+  fiscalYears: string[],
+  hasSubCategories: boolean
+): Record<string, { year: string; nextStep: string }> {
+  const map: Record<string, { year: string; nextStep: string }> = {}
+
+  fiscalYears.forEach((year, index) => {
+    const id = String(index + 1)
+    map[id] = {
+      year,
+      nextStep: hasSubCategories ? `${categoryId}_sub_selection` : 'fetch_documents',
+    }
+  })
+
+  return map
 }
 
-// Maps sub-category steps → valid inputs → subCategory
-const SUB_CATEGORY_MAP: Record<string, Record<string, string>> = {
-  gst_type: {
-    '1': 'GSTR-1',
-    '2': 'GSTR-3B',
-  },
-  income_tax_type: {
-    '1': 'ITR',
-    '2': 'Acknowledgement',
-    '3': 'Computation',
-  },
+/**
+ * Build sub-category map for a specific category
+ */
+function buildSubCategoryMapForCategory(subCategories: string[]): Record<string, string> {
+  const map: Record<string, string> = {}
+
+  subCategories.forEach((sub, index) => {
+    const id = String(index + 1)
+    map[id] = sub
+  })
+
+  return map
 }
 
 function createSession(step: string, overrides?: Partial<BotSession>): BotSession {
@@ -333,16 +375,22 @@ export async function processMessage(
 
   // "hi" / "hello" → start fresh with category menu
   if (input === 'hi' || input === 'hello') {
-    return buildStepResult('category_selection', createSession('category_selection'))
+    const categorySelection = await buildCategorySelection()
+    return {
+      message: categorySelection.body,
+      interactive: categorySelection,
+      session: createSession('category_selection'),
+    }
   }
 
   // "0" / "main_menu" / "select_category" → restart to category menu
   if ((input === '0' || input === 'main_menu' || input === 'select_category') && session) {
-    return buildStepResult(
-      'category_selection',
-      createSession('category_selection'),
-      FLOW_MESSAGES.restart
-    )
+    const categorySelection = await buildCategorySelection()
+    return {
+      message: FLOW_MESSAGES.restart,
+      interactive: categorySelection,
+      session: createSession('category_selection'),
+    }
   }
 
   // "back" / "#" → go back to previous step
@@ -355,17 +403,56 @@ export async function processMessage(
     const backStep = result.step
     const backSession = result.session
 
-    // If the step has a known interactive payload, return it
+    // If going back to a dynamic step, rebuild the interactive payload
+    if (backStep === 'category_selection') {
+      const categorySelection = await buildCategorySelection()
+      return {
+        message: FLOW_MESSAGES.back,
+        interactive: categorySelection,
+        session: backSession,
+      }
+    }
+
+    // Handle dynamic year selection steps
+    if (backStep.endsWith('_year_selection')) {
+      const categoryId = backStep.replace('_year_selection', '')
+      const categories = await getCategories()
+      const categoryName = Object.keys(categories)[parseInt(categoryId) - 1]
+      const config = categories[categoryName]
+      const yearSelection = await buildYearSelection('category_year', categoryName, config.fiscalYears)
+      return {
+        message: yearSelection.body,
+        interactive: yearSelection,
+        session: backSession,
+      }
+    }
+
+    // Handle dynamic sub-category selection steps
+    if (backStep.endsWith('_sub_selection')) {
+      const categoryId = backStep.replace('_sub_selection', '')
+      const categories = await getCategories()
+      const categoryName = Object.keys(categories)[parseInt(categoryId) - 1]
+      const config = categories[categoryName]
+      const subSelection = await buildSubCategorySelection('category_sub', config.subCategories)
+      return {
+        message: subSelection.body,
+        interactive: subSelection,
+        session: backSession,
+      }
+    }
+
+    // For other known steps, use STEP_INTERACTIVE
     if (STEP_INTERACTIVE[backStep]) {
       return buildStepResult(backStep, backSession, FLOW_MESSAGES.back)
     }
 
-    // If going back to a fetch step (like other_docs), go to category instead
-    return buildStepResult(
-      'category_selection',
-      createSession('category_selection'),
-      FLOW_MESSAGES.back
-    )
+    // Fallback: go to category selection
+    const categorySelection = await buildCategorySelection()
+    return {
+      message: FLOW_MESSAGES.back,
+      interactive: categorySelection,
+      session: createSession('category_selection'),
+    }
   }
 
   // No active session
@@ -378,35 +465,73 @@ export async function processMessage(
 
   const step = session.currentStep
 
-  // Category selection
+  // Category selection - dynamic
   if (step === 'category_selection') {
-    const selected = CATEGORY_MAP[input]
+    const categoryMap = await buildCategoryMap()
+    const selected = categoryMap[input]
+
     if (!selected) {
       return { message: FLOW_MESSAGES.invalid_input, session }
     }
 
-    // "Other Documents" → fetch directly without year selection
-    if (selected.step === 'other_docs') {
+    const categories = await getCategories()
+    const config = categories[selected.category]
+
+    // If no fiscal years and no sub-categories, fetch documents directly
+    if (!config.fiscalYears.length && !config.subCategories.length) {
       return fetchAndListDocuments(phone, {
-        ...pushStep(session, 'other_docs'),
+        ...pushStep(session, 'category_direct'),
         category: selected.category,
       })
     }
 
-    const newSession = pushStep(session, selected.step)
-    newSession.category = selected.category
-    return buildStepResult(selected.step, newSession)
+    // If has fiscal years, show year selection
+    if (config.fiscalYears.length > 0) {
+      const newSession = pushStep(session, selected.step)
+      newSession.category = selected.category
+      newSession.categoryId = input // Store the category ID for later lookup
+      const yearSelection = await buildYearSelection('category_year', selected.category, config.fiscalYears)
+      return {
+        message: yearSelection.body,
+        interactive: yearSelection,
+        session: newSession,
+      }
+    }
+
+    // If no fiscal years but has sub-categories, show sub-category selection
+    if (config.subCategories.length > 0) {
+      const newSession = pushStep(session, selected.step.replace('_year_selection', '_sub_selection'))
+      newSession.category = selected.category
+      newSession.categoryId = input
+      const subSelection = await buildSubCategorySelection('category_sub', config.subCategories)
+      return {
+        message: subSelection.body,
+        interactive: subSelection,
+        session: newSession,
+      }
+    }
+
+    // Fallback
+    return { message: FLOW_MESSAGES.invalid_input, session }
   }
 
-  // Year selection steps
-  if (YEAR_MAP[step]) {
-    const yearEntry = YEAR_MAP[step][input]
+  // Dynamic year selection steps
+  if (step.endsWith('_year_selection')) {
+    const categoryId = step.replace('_year_selection', '')
+    const categories = await getCategories()
+    const categoryName = Object.keys(categories)[parseInt(categoryId) - 1]
+    const config = categories[categoryName]
+
+    const yearMap = buildYearMapForCategory(categoryId, config.fiscalYears, config.subCategories.length > 0)
+    const yearEntry = yearMap[input]
+
     if (!yearEntry) {
       return { message: FLOW_MESSAGES.invalid_input, session }
     }
 
     const updatedSession = pushStep(session, yearEntry.nextStep)
     updatedSession.fiscalYear = yearEntry.year
+    updatedSession.categoryId = categoryId
 
     // If next step is fetch_documents, query and list
     if (yearEntry.nextStep === 'fetch_documents') {
@@ -414,26 +539,33 @@ export async function processMessage(
     }
 
     // Otherwise show sub-category menu
-    return buildStepResult(yearEntry.nextStep, updatedSession)
+    const subSelection = await buildSubCategorySelection('category_sub', config.subCategories)
+    return {
+      message: subSelection.body,
+      interactive: subSelection,
+      session: updatedSession,
+    }
   }
 
-  // Sub-category selection steps
-  if (SUB_CATEGORY_MAP[step]) {
-    // Download All for income tax — fetch docs across all sub-categories
-    if (input === 'download_all' && step === 'income_tax_type') {
+  // Dynamic sub-category selection steps
+  if (step.endsWith('_sub_selection')) {
+    const categoryId = session.categoryId || step.replace('_sub_selection', '')
+    const categories = await getCategories()
+    const categoryName = Object.keys(categories)[parseInt(categoryId) - 1]
+    const config = categories[categoryName]
+
+    // Download All for sub-category steps with download_all option
+    if (input === 'download_all') {
       try {
-        const documents = await getFilteredDocuments(
-          phone,
-          session.category!,
-          session.fiscalYear
-        )
+        const documents = await getFilteredDocuments(phone, categoryName, session.fiscalYear)
 
         if (documents.length === 0) {
-          return buildStepResult(
-            'category_selection',
-            createSession('category_selection'),
-            FLOW_MESSAGES.no_documents
-          )
+          const categorySelection = await buildCategorySelection()
+          return {
+            message: FLOW_MESSAGES.no_documents,
+            interactive: categorySelection,
+            session: createSession('category_selection'),
+          }
         }
 
         const signedDocs = await Promise.all(
@@ -451,7 +583,7 @@ export async function processMessage(
           session,
         }
       } catch (error) {
-        console.error('Error fetching all income tax documents:', error)
+        console.error('Error fetching all documents:', error)
         return {
           message: 'Something went wrong while fetching your documents. Please try again later.',
           session: createSession('category_selection'),
@@ -459,7 +591,9 @@ export async function processMessage(
       }
     }
 
-    const subCat = SUB_CATEGORY_MAP[step][input]
+    const subMap = buildSubCategoryMapForCategory(config.subCategories)
+    const subCat = subMap[input]
+
     if (!subCat) {
       return { message: FLOW_MESSAGES.invalid_input, session }
     }
@@ -468,6 +602,12 @@ export async function processMessage(
     updatedSession.subCategory = subCat
 
     return fetchAndListDocuments(phone, updatedSession)
+  }
+
+  // Handle legacy static steps (for backward compatibility with existing sessions)
+  if (STEP_INTERACTIVE[step]) {
+    // Legacy handling - would need migration but keeping for backward compat
+    // This handles old sessions that might still be using the old step names
   }
 
   // Document list — user picks a number to download
@@ -546,11 +686,12 @@ async function fetchAndListDocuments(
     )
 
     if (documents.length === 0) {
-      return buildStepResult(
-        'category_selection',
-        createSession('category_selection'),
-        FLOW_MESSAGES.no_documents
-      )
+      const categorySelection = await buildCategorySelection()
+      return {
+        message: FLOW_MESSAGES.no_documents,
+        interactive: categorySelection,
+        session: createSession('category_selection'),
+      }
     }
 
     // Cap at 8 documents (+ Download All = 9 rows in section; nav is a separate section)
@@ -595,8 +736,10 @@ async function fetchAndListDocuments(
     }
   } catch (error) {
     console.error('Error fetching documents:', error)
+    const categorySelection = await buildCategorySelection()
     return {
       message: 'Something went wrong while fetching your documents. Please try again later.',
+      interactive: categorySelection,
       session: createSession('category_selection'),
     }
   }

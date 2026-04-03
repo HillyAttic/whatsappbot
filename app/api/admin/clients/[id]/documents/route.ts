@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getFirestore } from '@/lib/firebase-admin'
 import { verifyAdminToken, unauthorizedResponse } from '@/lib/auth-middleware'
-import { CATEGORIES } from '@/lib/document-categories'
+import { getCategories } from '@/lib/document-service'
 
 export const dynamic = 'force-dynamic'
 
@@ -92,14 +92,16 @@ export async function POST(
       )
     }
 
-    if (!category || !CATEGORIES[category]) {
+    const categories = await getCategories()
+
+    if (!category || !categories[category]) {
       return NextResponse.json(
         { error: 'Valid category is required' },
         { status: 400 }
       )
     }
 
-    const catConfig = CATEGORIES[category]
+    const catConfig = categories[category]
 
     if (catConfig.fiscalYears.length > 0 && !fiscalYear) {
       return NextResponse.json(

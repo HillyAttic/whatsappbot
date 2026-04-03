@@ -159,3 +159,40 @@ export async function getBotSession(phone: string): Promise<BotSession | null> {
   }
   return data
 }
+
+/**
+ * Get dynamic categories configuration from Firestore
+ * Falls back to static CATEGORIES if Firestore config is empty
+ */
+export async function getCategories(): Promise<Record<string, { fiscalYears: string[]; subCategories: string[] }>> {
+  try {
+    const db = getFirestore()
+    console.log('[getCategories] Firestore instance obtained, reading config/categories...')
+    const doc = await db.collection('config').doc('categories').get()
+
+    console.log('[getCategories] Firestore doc exists:', doc.exists)
+
+    if (doc.exists) {
+      const data = doc.data()
+      const categoryKeys = data?.categories ? Object.keys(data.categories) : []
+      console.log('[getCategories] Category keys from Firestore:', categoryKeys)
+
+      if (data?.categories && categoryKeys.length > 0) {
+        console.log('[getCategories] Returning', categoryKeys.length, 'categories from Firestore')
+        return data.categories
+      } else {
+        console.warn('[getCategories] Firestore doc exists but categories is empty or missing. Data keys:', data ? Object.keys(data) : 'null')
+      }
+    } else {
+      console.warn('[getCategories] Firestore doc config/categories does NOT exist — will use fallback')
+    }
+  } catch (error) {
+    console.error('[getCategories] ERROR reading from Firestore:', error instanceof Error ? error.message : error)
+    console.error('[getCategories] Stack:', error instanceof Error ? error.stack : 'N/A')
+  }
+
+  // Fallback to static config
+  const { CATEGORIES } = await import('./document-categories')
+  console.log('[getCategories] Using FALLBACK static CATEGORIES with', Object.keys(CATEGORIES).length, 'categories')
+  return CATEGORIES
+}
