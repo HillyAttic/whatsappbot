@@ -124,7 +124,7 @@ async function buildCategorySelection(): Promise<InteractivePayload> {
   const categories = await getCategories()
   const rows = Object.keys(categories).map((name, index) => ({
     id: String(index + 1),
-    title: name,
+    title: truncate(name, 24),
   }))
 
   return {
@@ -148,7 +148,10 @@ async function buildYearSelection(
   category: string,
   fiscalYears: string[]
 ): Promise<InteractivePayload> {
-  const rows = fiscalYears.map((year, index) => ({
+  // WhatsApp allows max 10 rows total across all sections.
+  // Reserve 2 rows for navigation (Back + Main Menu), so cap at 8 FY rows.
+  const cappedYears = fiscalYears.slice(0, 8)
+  const rows = cappedYears.map((year, index) => ({
     id: String(index + 1),
     title: year,
   }))
