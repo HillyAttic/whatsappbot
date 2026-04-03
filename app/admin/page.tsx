@@ -7,6 +7,8 @@ import ClientForm from '@/components/admin/ClientForm'
 import DocumentList from '@/components/admin/DocumentList'
 import DocumentForm from '@/components/admin/DocumentForm'
 import ConfirmDialog from '@/components/admin/ConfirmDialog'
+import CategoryManager from '@/components/admin/CategoryManager'
+import { CATEGORY_NAMES, CATEGORIES } from '@/lib/document-categories'
 
 interface Client {
   id: string
@@ -39,10 +41,17 @@ export default function AdminPage() {
   const [editingClient, setEditingClient] = useState<Client | null>(null)
   const [deletingClient, setDeletingClient] = useState<Client | null>(null)
   const [creatingClient, setCreatingClient] = useState(false)
+  const [updatingClient, setUpdatingClient] = useState(false)
+  const [isDeletingClient, setIsDeletingClient] = useState(false)
+
+  const [categories, setCategories] = useState<Record<string, { fiscalYears: string[]; subCategories: string[] }>>(CATEGORIES)
+  const [categoryModal, setCategoryModal] = useState(false)
+  const [loadingCategories, setLoadingCategories] = useState(false)
 
   const [docModal, setDocModal] = useState<ModalMode>(null)
   const [editingDoc, setEditingDoc] = useState<Document | null>(null)
   const [deletingDoc, setDeletingDoc] = useState<Document | null>(null)
+  const [isDeletingDoc, setIsDeletingDoc] = useState(false)
   const [uploadPreset, setUploadPreset] = useState<{ category: string; fiscalYear: string | null; subCategory: string | null } | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState('')
@@ -54,7 +63,7 @@ export default function AdminPage() {
     setTimeout(() => setToast(null), 3000)
   }
 
-  useEffect(() => { loadClients() }, [])
+  useEffect(() => { loadClients(); loadCategories() }, [])
 
   useEffect(() => {
     if (selectedClient) { loadDocuments(selectedClient.id) }
@@ -77,6 +86,41 @@ export default function AdminPage() {
       showToast('Failed to load clients', 'error')
     } finally {
       setLoadingClients(false)
+    }
+  }
+
+  const loadCategories = async () => {
+    try {
+      setLoadingCategories(true)
+      const res = await fetch('/api/admin/categories', { headers: authHeaders() })
+      if (!res.ok) throw new Error('Failed')
+      const data = await res.json()
+      if (data.categories && Object.keys(data.categories).length > 0) {
+        setCategories(data.categories)
+      }
+    } catch (error) {
+      console.error('Failed to load categories', error)
+    } finally {
+      setLoadingCategories(false)
+    }
+  }
+
+  const handleSaveCategories = async (newCategories: Record<string, { fiscalYears: string[]; subCategories: string[] }>) => {
+    try {
+      setLoadingCategories(true)
+      const res = await fetch('/api/admin/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ categories: newCategories }),
+      })
+      if (!res.ok) throw new Error('Failed')
+      setCategories(newCategories)
+      setCategoryModal(false)
+      showToast('Categories updated successfully')
+    } catch (error) {
+      showToast('Failed to save categories', 'error')
+    } finally {
+      setLoadingCategories(false)
     }
   }
 
@@ -116,6 +160,7 @@ export default function AdminPage() {
   const handleUpdateClient = async (data: { name: string; phone: string }) => {
     if (!editingClient) return
     try {
+      setUpdatingClient(true)
       const res = await fetch('/api/admin/clients/' + editingClient.id, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -128,14 +173,17 @@ export default function AdminPage() {
       if (selectedClient?.id === editingClient.id) {
         setSelectedClient({ ...editingClient, ...data })
       }
-      showToast('Client updated')
+      showToast('Client updated successfully')
     } catch (error) {
       showToast('Failed to update client', 'error')
+    } finally {
+      setUpdatingClient(false)
     }
   }
 
   const handleDeleteClient = async () => {
     if (!deletingClient) return
+    setIsDeletingClient(true)
     try {
       await fetch('/api/admin/clients/' + deletingClient.id, {
         method: 'DELETE',
@@ -144,9 +192,11 @@ export default function AdminPage() {
       if (selectedClient?.id === deletingClient.id) { setSelectedClient(null) }
       setDeletingClient(null)
       await loadClients()
-      showToast('Client deleted')
+      showToast('Client deleted successfully')
     } catch (error) {
       showToast('Failed to delete client', 'error')
+    } finally {
+      setIsDeletingClient(false)
     }
   }
 
@@ -264,6 +314,7 @@ export default function AdminPage() {
 
   const handleDeleteDocument = async () => {
     if (!selectedClient || !deletingDoc) return
+    setIsDeletingDoc(true)
     try {
       await fetch('/api/admin/clients/' + selectedClient.id + '/documents/' + deletingDoc.id, {
         method: 'DELETE',
@@ -271,9 +322,11 @@ export default function AdminPage() {
       })
       setDeletingDoc(null)
       await loadDocuments(selectedClient.id)
-      showToast('Document deleted')
+      showToast('Document deleted successfully')
     } catch (error) {
       showToast('Failed to delete document', 'error')
+    } finally {
+      setIsDeletingDoc(false)
     }
   }
 
@@ -297,9 +350,14 @@ export default function AdminPage() {
         <div className="flex-1 flex flex-col min-h-0">
           <div className="px-5 pt-4 pb-2 flex items-center justify-between">
             <h2 className="text-[11px] font-semibold text-ink-muted uppercase tracking-widest">Clients</h2>
-            <button onClick={() => { setEditingClient(null); setClientModal('create') }} className="w-7 h-7 flex items-center justify-center rounded-lg bg-accent/20 hover:bg-accent/30 text-accent-light transition-colors" title="Add client">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-            </button>
+            <div className="flex gap-1">
+              <button onClick={() => setCategoryModal(true)} className="w-7 h-7 flex items-center justify-center rounded-lg bg-accent/20 hover:bg-accent/30 text-accent-light transition-colors" title="Manage categories">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" /><path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" /></svg>
+              </button>
+              <button onClick={() => { setEditingClient(null); setClientModal('create') }} className="w-7 h-7 flex items-center justify-center rounded-lg bg-accent/20 hover:bg-accent/30 text-accent-light transition-colors" title="Add client">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto py-1">
@@ -353,6 +411,7 @@ export default function AdminPage() {
                   onDelete={setDeletingDoc}
                   onUpload={(preset) => { setEditingDoc(null); setUploadPreset(preset); setDocModal('create') }}
                   getAuthToken={getToken}
+                  categoryConfig={categories}
                 />
               )}
             </div>
@@ -376,7 +435,21 @@ export default function AdminPage() {
         <div className="fixed inset-0 bg-black/40 modal-backdrop flex items-center justify-center z-50 animate-fade-in" onClick={() => { setClientModal(null); setEditingClient(null) }}>
           <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-modal animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-display font-semibold text-ink mb-5">{clientModal === 'create' ? 'New Client' : 'Edit Client'}</h3>
-            <ClientForm initial={editingClient || undefined} onSubmit={clientModal === 'create' ? handleCreateClient : handleUpdateClient} onCancel={() => { setClientModal(null); setEditingClient(null) }} loading={clientModal === 'create' ? creatingClient : false} />
+            <ClientForm initial={editingClient || undefined} onSubmit={clientModal === 'create' ? handleCreateClient : handleUpdateClient} onCancel={() => { setClientModal(null); setEditingClient(null) }} loading={clientModal === 'create' ? creatingClient : updatingClient} />
+          </div>
+        </div>
+      )}
+
+      {categoryModal && (
+        <div className="fixed inset-0 bg-black/40 modal-backdrop flex items-center justify-center z-50 animate-fade-in" onClick={() => setCategoryModal(false)}>
+          <div className="bg-white rounded-2xl p-6 max-w-2xl w-full mx-4 shadow-modal animate-scale-in max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-display font-semibold text-ink mb-5">Manage Categories</h3>
+            <CategoryManager
+              categories={categories}
+              onSave={handleSaveCategories}
+              onCancel={() => setCategoryModal(false)}
+              loading={loadingCategories}
+            />
           </div>
         </div>
       )}
@@ -399,8 +472,8 @@ export default function AdminPage() {
         </div>
       )}
 
-      {deletingClient && (<ConfirmDialog message={`Delete "${deletingClient.name}" and all their documents? This cannot be undone.`} onConfirm={handleDeleteClient} onCancel={() => setDeletingClient(null)} />)}
-      {deletingDoc && (<ConfirmDialog message={`Delete "${deletingDoc.title}"? This cannot be undone.`} onConfirm={handleDeleteDocument} onCancel={() => setDeletingDoc(null)} />)}
+      {deletingClient && (<ConfirmDialog message={`Delete "${deletingClient.name}" and all their documents? This cannot be undone.`} onConfirm={handleDeleteClient} onCancel={() => setDeletingClient(null)} loading={isDeletingClient} />)}
+      {deletingDoc && (<ConfirmDialog message={`Delete "${deletingDoc.title}"? This cannot be undone.`} onConfirm={handleDeleteDocument} onCancel={() => setDeletingDoc(null)} loading={isDeletingDoc} />)}
 
       {toast && (
         <div className="fixed top-5 right-5 z-[60] toast-enter">

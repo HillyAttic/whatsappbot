@@ -146,7 +146,10 @@ function ChevronIcon({ open }: { open: boolean }) {
   )
 }
 
-export default function DocumentList({ documents, onEdit, onDelete, onUpload, getAuthToken }: DocumentListProps) {
+export default function DocumentList({
+  documents, onEdit, onDelete, onUpload, getAuthToken,
+  categoryConfig,
+}: DocumentListProps & { categoryConfig?: Record<string, { fiscalYears: string[]; subCategories: string[] }> }) {
   // Track which sections are open (collapsed by default)
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
 
@@ -167,10 +170,13 @@ export default function DocumentList({ documents, onEdit, onDelete, onUpload, ge
 
   const uncategorised = documents.filter(d => !d.category)
 
+  const configToUse = categoryConfig || CATEGORIES
+  const categoryNames = Object.keys(configToUse)
+
   return (
     <div className="space-y-2">
-      {CATEGORY_NAMES.map(category => {
-        const config = CATEGORIES[category]
+      {categoryNames.map(category => {
+        const config = configToUse[category]
         const catOpen = openSections.has(category)
         const catDocCount = documents.filter(d => d.category === category).length
 
