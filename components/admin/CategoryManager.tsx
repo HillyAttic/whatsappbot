@@ -86,48 +86,45 @@ export default function CategoryManager({ categories, onSave, onCancel, loading 
   }
 
   return (
-    <div className="space-y-4">
-      {/* Add new category section */}
-      <div className="bg-surface rounded-xl p-4 border border-surface-border">
-        <h4 className="text-sm font-semibold text-ink mb-3">Add New Category</h4>
+    <div className="space-y-5">
+      {/* Add new category */}
+      <div className="bg-surface border-2 border-ink/8 p-4">
+        <h4 className="eyebrow mb-3">Add New Category</h4>
         <div className="flex gap-2">
           <input
             type="text"
             value={newCategoryName}
             onChange={(e) => setNewCategoryName(e.target.value)}
             placeholder="Enter category name"
-            className="flex-1 px-3 py-2 bg-white border border-surface-border rounded-lg text-sm text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-all"
+            className="flex-1 px-4 py-2.5 bg-white border-2 border-ink/10 rounded-none text-sm text-ink placeholder:text-ink-muted focus:outline-none focus:border-accent transition-all"
           />
           <button
             onClick={handleAddCategory}
-            className="px-4 py-2 text-sm font-medium bg-accent text-white rounded-lg hover:bg-accent-hover transition-colors shadow-sm flex items-center gap-1.5"
+            className="px-5 py-2.5 text-xs font-bold uppercase tracking-wider bg-accent text-white rounded-none hover:bg-accent-hover transition-colors shadow-bold border-2 border-transparent"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
             Add
           </button>
         </div>
         {errors.name && <p className="text-danger text-xs mt-1.5 font-medium">{errors.name}</p>}
       </div>
 
-      {/* Existing categories list */}
-      <div className="space-y-3 max-h-96 overflow-y-auto">
+      {/* Existing categories */}
+      <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
         {Object.entries(categoryData).map(([name, config]) => (
-          <div key={name} className="bg-white rounded-xl border border-surface-border overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 bg-surface border-b border-surface-border">
+          <div key={name} className="bg-white border-2 border-ink/8 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 bg-ink/[0.02] border-b border-ink/8">
               <div className="flex-1">
-                <h5 className="text-sm font-semibold text-ink">{name}</h5>
-                <p className="text-xs text-ink-muted mt-0.5">
-                  {config.fiscalYears.length} fiscal year(s), {config.subCategories.length} sub-category(ies)
+                <h5 className="text-sm font-bold text-ink">{name}</h5>
+                <p className="text-[11px] text-ink-muted mt-0.5">
+                  {config.fiscalYears.length} fiscal year(s) &bull; {config.subCategories.length} sub-categor{config.subCategories.length !== 1 ? 'ies' : 'y'}
                 </p>
               </div>
               <button
                 onClick={() => handleDeleteCategory(name)}
-                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-50 text-ink-muted hover:text-danger transition-colors"
+                className="w-8 h-8 flex items-center justify-center rounded-none hover:bg-danger/10 text-ink-muted hover:text-danger transition-colors border border-transparent hover:border-danger/20"
                 title="Delete category"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
                 </svg>
               </button>
@@ -137,31 +134,25 @@ export default function CategoryManager({ categories, onSave, onCancel, loading 
               {/* Fiscal Years */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-medium text-ink-muted">Fiscal Years</span>
+                  <span className="eyebrow">Fiscal Years</span>
                   <button
                     onClick={() => handleAddFiscalYear(name)}
-                    className="text-xs text-accent hover:text-accent-hover font-medium flex items-center gap-1"
+                    className="text-[10px] font-bold uppercase tracking-wider text-accent hover:text-accent-hover flex items-center gap-1"
                   >
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                    </svg>
-                    Add Year
+                    + Add Year
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {config.fiscalYears.length === 0 ? (
-                    <span className="text-xs text-ink-muted italic">No fiscal years</span>
+                    <span className="text-[11px] text-ink-muted italic">No fiscal years</span>
                   ) : (
                     config.fiscalYears.map((year) => (
                       <span
                         key={year}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-accent/10 text-accent rounded"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium bg-accent/10 text-accent border border-accent/20"
                       >
                         {year}
-                        <button
-                          onClick={() => handleDeleteFiscalYear(name, year)}
-                          className="hover:text-danger"
-                        >
+                        <button onClick={() => handleDeleteFiscalYear(name, year)} className="hover:text-danger transition-colors">
                           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                           </svg>
@@ -175,31 +166,25 @@ export default function CategoryManager({ categories, onSave, onCancel, loading 
               {/* Sub Categories */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-medium text-ink-muted">Sub-Categories</span>
+                  <span className="eyebrow">Sub-Categories</span>
                   <button
                     onClick={() => handleAddSubCategory(name)}
-                    className="text-xs text-accent hover:text-accent-hover font-medium flex items-center gap-1"
+                    className="text-[10px] font-bold uppercase tracking-wider text-[#0c8599] hover:text-[#0b7285] flex items-center gap-1"
                   >
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                    </svg>
-                    Add Sub-Category
+                    + Add Sub
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {config.subCategories.length === 0 ? (
-                    <span className="text-xs text-ink-muted italic">No sub-categories</span>
+                    <span className="text-[11px] text-ink-muted italic">No sub-categories</span>
                   ) : (
                     config.subCategories.map((sub) => (
                       <span
                         key={sub}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-blue-50 text-blue-600 rounded"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium bg-[#0c8599]/10 text-[#0c8599] border border-[#0c8599]/20"
                       >
                         {sub}
-                        <button
-                          onClick={() => handleDeleteSubCategory(name, sub)}
-                          className="hover:text-danger"
-                        >
+                        <button onClick={() => handleDeleteSubCategory(name, sub)} className="hover:text-danger transition-colors">
                           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                           </svg>
@@ -214,12 +199,12 @@ export default function CategoryManager({ categories, onSave, onCancel, loading 
         ))}
       </div>
 
-      <div className="flex justify-end gap-3 pt-2">
+      <div className="flex justify-end gap-3 pt-3 border-t border-ink/10">
         <button
           type="button"
           onClick={onCancel}
           disabled={loading}
-          className="px-4 py-2 text-sm font-medium text-ink-secondary hover:text-ink rounded-lg hover:bg-surface-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-5 py-2.5 text-sm font-medium text-ink-secondary hover:text-ink rounded-none hover:bg-surface-hover transition-colors border border-ink/10 hover:border-ink/20 disabled:opacity-50"
         >
           Cancel
         </button>
@@ -227,7 +212,7 @@ export default function CategoryManager({ categories, onSave, onCancel, loading 
           type="button"
           onClick={() => onSave(categoryData)}
           disabled={loading}
-          className="px-5 py-2 text-sm font-medium bg-accent text-white rounded-lg hover:bg-accent-hover transition-colors shadow-sm disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
+          className="px-6 py-2.5 text-xs font-bold uppercase tracking-wider bg-accent text-white rounded-none hover:bg-accent-hover transition-colors shadow-bold border-2 border-transparent disabled:opacity-70 flex items-center gap-2"
         >
           {loading ? (
             <>

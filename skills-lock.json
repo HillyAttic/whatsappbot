@@ -11,6 +11,11 @@
       "sourceType": "github",
       "computedHash": "516bd2154eb843a8240e43d5b285229129853114ad7075a5e141e1c08e408c84"
     },
+    "nextjs-pwa": {
+      "source": "just-mpm/conformai",
+      "sourceType": "github",
+      "computedHash": "6415dc9116f163d265857caeacdd8ba860d106c7ff7c104b0699a0dd5ef254f6"
+    },
     "whatsapp-cloud-api": {
       "source": "bellopushon/whatsapp-cloud-api",
       "sourceType": "github",

@@ -1,5 +1,18 @@
 {
   "permissions": {
-    "allow": []
+    "allow": [
+      "Bash(npx skills *)",
+      "Bash(grep -E \"\\\\.\\(json|js|ts|mjs|cjs\\)$\")",
+      "Bash(npx next *)",
+      "Bash(npx tsc *)",
+      "Bash(npm i *)",
+      "Bash(npm run *)",
+      "mcp__ide__getDiagnostics",
+      "Bash(grep -r \"vercel\" \"D:\\\\whatsappbot\" --include=\"*.json\" --include=\"*.ts\" ! -path \"*/node_modules/*\")",
+      "Bash(grep -E \"\\\\.ts$\")",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)"
+    ]
   }
 }

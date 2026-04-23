@@ -21,25 +21,65 @@ export async function PUT(
   try {
     const db = getFirestore()
     const body = await req.json()
-    const { name, phone } = body
+    const { name, phones, gstNumber } = body
 
-    if (!name || !phone) {
+    if (!name || !phones || !Array.isArray(phones) || phones.length === 0) {
       return NextResponse.json(
-        { error: 'Name and phone are required' },
+        { error: 'Name and at least one phone number are required' },
         { status: 400 }
       )
     }
 
-    const normalizedPhone = normalizePhone(phone)
-    await db.collection('users').doc(params.id).update({
+    // Validate GST format if provided
+    if (gstNumber) {
+      const gstPattern = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
+      if (gstNumber.length !== 15 || !gstPattern.test(gstNumber)) {
+        return NextResponse.json(
+          { error: 'Invalid GST number format' },
+          { status: 400 }
+        )
+      }
+
+      // Check GST uniqueness (excluding current client)
+      const gstSnapshot = await db.collection('users').where('gstNumber', '==', gstNumber).limit(2).get()
+      const otherClientsWithGst = gstSnapshot.docs.filter(doc => doc.id !== params.id)
+      if (otherClientsWithGst.length > 0) {
+        return NextResponse.json(
+          { error: 'GST number already exists for another client' },
+          { status: 400 }
+        )
+      }
+    }
+
+    // Normalize and check phone uniqueness (excluding current client)
+    const normalizedPhones = phones.map(p => normalizePhone(p))
+    for (const phone of normalizedPhones) {
+      const phoneSnapshot = await db.collection('users').where('phones', 'array-contains', phone).limit(2).get()
+      const otherClientsWithPhone = phoneSnapshot.docs.filter(doc => doc.id !== params.id)
+      if (otherClientsWithPhone.length > 0) {
+        return NextResponse.json(
+          { error: `Phone number ${phone} already exists for another client` },
+          { status: 400 }
+        )
+      }
+    }
+
+    const updateData: any = {
       name,
-      phone: normalizedPhone,
-    })
+      phones: normalizedPhones,
+    }
+
+    if (gstNumber) {
+      updateData.gstNumber = gstNumber
+    }
+
+    await db.collection('users').doc(params.id).update(updateData)
 
     return NextResponse.json({
       id: params.id,
       name,
-      phone: normalizedPhone
+      phones: normalizedPhones,
+      gstNumber
     })
   } catch (error) {
     console.error('Error updating client:', error)

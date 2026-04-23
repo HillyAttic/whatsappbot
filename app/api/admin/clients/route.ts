@@ -45,21 +45,58 @@ export async function POST(req: NextRequest) {
   try {
     const db = getFirestore()
     const body = await req.json()
-    const { name, phone } = body
+    const { name, phones, gstNumber } = body
 
-    if (!name || !phone) {
+    if (!name || !phones || !Array.isArray(phones) || phones.length === 0) {
       return NextResponse.json(
-        { error: 'Name and phone are required' },
+        { error: 'Name and at least one phone number are required' },
         { status: 400 }
       )
     }
 
-    const normalizedPhone = normalizePhone(phone)
-    const docRef = await db.collection('users').add({
+    // Validate GST format if provided
+    if (gstNumber) {
+      const gstPattern = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
+      if (gstNumber.length !== 15 || !gstPattern.test(gstNumber)) {
+        return NextResponse.json(
+          { error: 'Invalid GST number format' },
+          { status: 400 }
+        )
+      }
+
+      // Check GST uniqueness
+      const gstSnapshot = await db.collection('users').where('gstNumber', '==', gstNumber).limit(1).get()
+      if (!gstSnapshot.empty) {
+        return NextResponse.json(
+          { error: 'GST number already exists for another client' },
+          { status: 400 }
+        )
+      }
+    }
+
+    // Normalize and check phone uniqueness
+    const normalizedPhones = phones.map(p => normalizePhone(p))
+    for (const phone of normalizedPhones) {
+      const phoneSnapshot = await db.collection('users').where('phones', 'array-contains', phone).limit(1).get()
+      if (!phoneSnapshot.empty) {
+        return NextResponse.json(
+          { error: `Phone number ${phone} already exists for another client` },
+          { status: 400 }
+        )
+      }
+    }
+
+    const docData: any = {
       name,
-      phone: normalizedPhone,
+      phones: normalizedPhones,
       createdAt: new Date().toISOString()
-    })
+    }
+
+    if (gstNumber) {
+      docData.gstNumber = gstNumber
+    }
+
+    const docRef = await db.collection('users').add(docData)
 
     // Scaffold the JPCO folder structure in Firebase Storage
     const placeholder = Buffer.from('')
@@ -71,7 +108,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       id: docRef.id,
       name,
-      phone: normalizedPhone
+      phones: normalizedPhones,
+      gstNumber
     }, { status: 201 })
   } catch (error) {
     console.error('Error creating client:', error)
