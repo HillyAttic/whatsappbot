@@ -159,16 +159,27 @@ export async function findUser(phone: string): Promise<User | null> {
 export async function getDocuments(phone: string): Promise<Document[]> {
   const db = getFirestore()
   const normalizedPhone = normalizePhone(phone)
-  const snapshot = await db
-    .collection('documents')
-    .where('phone', '==', normalizedPhone)
-    .orderBy('uploadedAt', 'desc')
-    .get()
 
-  return snapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data(),
-  })) as Document[]
+  console.log('[getDocuments] Fetching documents for phone:', normalizedPhone)
+
+  try {
+    const snapshot = await db
+      .collection('documents')
+      .where('phone', '==', normalizedPhone)
+      .orderBy('uploadedAt', 'desc')
+      .get()
+
+    console.log('[getDocuments] Found', snapshot.size, 'documents')
+
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    })) as Document[]
+  } catch (error) {
+    console.error('[getDocuments] ERROR:', error)
+    console.error('[getDocuments] Phone:', normalizedPhone)
+    throw error
+  }
 }
 
 /**
@@ -183,27 +194,47 @@ export async function getFilteredDocuments(
   const db = getFirestore()
   const normalizedPhone = normalizePhone(phone)
 
-  let query = db
-    .collection('documents')
-    .where('phone', '==', normalizedPhone)
-    .where('category', '==', category)
+  console.log('[getFilteredDocuments] Query params:', {
+    normalizedPhone,
+    category,
+    fiscalYear,
+    subCategory
+  })
 
-  if (fiscalYear) {
-    query = query.where('fiscalYear', '==', fiscalYear)
+  try {
+    let query = db
+      .collection('documents')
+      .where('phone', '==', normalizedPhone)
+      .where('category', '==', category)
+
+    if (fiscalYear) {
+      query = query.where('fiscalYear', '==', fiscalYear)
+    }
+
+    if (subCategory) {
+      query = query.where('subCategory', '==', subCategory)
+    }
+
+    const snapshot = await query.get()
+
+    console.log('[getFilteredDocuments] Found', snapshot.size, 'documents')
+
+    const docs = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    })) as Document[]
+
+    return docs.sort((a, b) => (b.uploadedAt || '').localeCompare(a.uploadedAt || ''))
+  } catch (error) {
+    console.error('[getFilteredDocuments] ERROR:', error)
+    console.error('[getFilteredDocuments] Query params:', {
+      normalizedPhone,
+      category,
+      fiscalYear,
+      subCategory
+    })
+    throw error
   }
-
-  if (subCategory) {
-    query = query.where('subCategory', '==', subCategory)
-  }
-
-  const snapshot = await query.get()
-
-  const docs = snapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data(),
-  })) as Document[]
-
-  return docs.sort((a, b) => (b.uploadedAt || '').localeCompare(a.uploadedAt || ''))
 }
 
 import type { BotSession } from './bot-flow'
