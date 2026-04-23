@@ -1,9 +1,35 @@
 import { getFirestore } from './firebase-admin'
 import { normalizePhone } from './phone'
 
+// In-memory cache for categories (survives within same serverless instance)
+interface CategoriesCache {
+  data: Record<string, { fiscalYears: string[]; subCategories: string[] }> | null
+  timestamp: number
+  loading: Promise<Record<string, { fiscalYears: string[]; subCategories: string[] }>> | null
+}
+
+const categoriesCache: CategoriesCache = {
+  data: null,
+  timestamp: 0,
+  loading: null
+}
+
+const CATEGORIES_TTL_MS = 30 * 60 * 1000 // 30 minutes
+
+// In-memory LRU cache for user lookups
+interface UserCacheEntry {
+  user: User | null
+  timestamp: number
+}
+
+const userCache = new Map<string, UserCacheEntry>()
+const USER_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+const USER_CACHE_MAX_SIZE = 100 // ~1MB max
+
 export interface User {
-  phone: string
+  phones: string[]
   name: string
+  gstNumber?: string
 }
 
 export interface Document {
@@ -73,19 +99,58 @@ export function sanitizeMessageBody(text: string): string {
 }
 
 /**
- * Find user by phone number
+ * Find user by phone number with in-memory caching
  */
 export async function findUser(phone: string): Promise<User | null> {
-  const db = getFirestore()
   const normalizedPhone = normalizePhone(phone)
-  const snapshot = await db.collection('users').where('phone', '==', normalizedPhone).limit(1).get()
+  const now = Date.now()
 
-  if (snapshot.empty) {
-    return null
+  // Check cache
+  const cached = userCache.get(normalizedPhone)
+  if (cached && (now - cached.timestamp) < USER_CACHE_TTL_MS) {
+    console.log('[findUser] Cache HIT for', normalizedPhone.slice(-4))
+    return cached.user
   }
 
-  const doc = snapshot.docs[0]
-  return doc.data() as User
+  console.log('[findUser] Cache MISS for', normalizedPhone.slice(-4))
+
+  const db = getFirestore()
+
+  // Try new format (phones array)
+  let snapshot = await db.collection('users').where('phones', 'array-contains', normalizedPhone).limit(1).get()
+
+  // Fallback to old format (phone string) for backward compatibility
+  if (snapshot.empty) {
+    snapshot = await db.collection('users').where('phone', '==', normalizedPhone).limit(1).get()
+  }
+
+  let user: User | null = null
+
+  if (!snapshot.empty) {
+    const doc = snapshot.docs[0]
+    const data = doc.data()
+
+    // Normalize to new format
+    user = {
+      phones: data.phones || (data.phone ? [data.phone] : []),
+      name: data.name,
+      gstNumber: data.gstNumber
+    }
+  }
+
+  // Cache the result (including null for non-existent users)
+  userCache.set(normalizedPhone, { user, timestamp: now })
+
+  // LRU eviction: remove oldest entries if cache is too large
+  if (userCache.size > USER_CACHE_MAX_SIZE) {
+    const oldestKey = userCache.keys().next().value
+    if (oldestKey) {
+      userCache.delete(oldestKey)
+      console.log('[findUser] Evicted oldest cache entry')
+    }
+  }
+
+  return user
 }
 
 /**
@@ -161,38 +226,81 @@ export async function getBotSession(phone: string): Promise<BotSession | null> {
 }
 
 /**
- * Get dynamic categories configuration from Firestore
+ * Get dynamic categories configuration from Firestore with in-memory caching
  * Falls back to static CATEGORIES if Firestore config is empty
  */
 export async function getCategories(): Promise<Record<string, { fiscalYears: string[]; subCategories: string[] }>> {
+  const now = Date.now()
+
+  // Return cached data if still valid
+  if (categoriesCache.data && (now - categoriesCache.timestamp) < CATEGORIES_TTL_MS) {
+    console.log('[getCategories] Returning CACHED categories (age:', Math.floor((now - categoriesCache.timestamp) / 1000), 'seconds)')
+    return categoriesCache.data
+  }
+
+  // If already loading, wait for that promise (prevents duplicate fetches)
+  if (categoriesCache.loading) {
+    console.log('[getCategories] Waiting for in-flight request')
+    return categoriesCache.loading
+  }
+
+  // Start loading
+  console.log('[getCategories] Cache miss or expired, fetching from Firestore')
+  categoriesCache.loading = fetchCategoriesFromFirestore()
+
+  try {
+    const result = await categoriesCache.loading
+    categoriesCache.data = result
+    categoriesCache.timestamp = now
+    console.log('[getCategories] Cache updated with', Object.keys(result).length, 'categories')
+    return result
+  } finally {
+    categoriesCache.loading = null
+  }
+}
+
+/**
+ * Internal function to fetch categories from Firestore
+ */
+async function fetchCategoriesFromFirestore(): Promise<Record<string, { fiscalYears: string[]; subCategories: string[] }>> {
   try {
     const db = getFirestore()
-    console.log('[getCategories] Firestore instance obtained, reading config/categories...')
+    console.log('[fetchCategoriesFromFirestore] Reading config/categories...')
     const doc = await db.collection('config').doc('categories').get()
 
-    console.log('[getCategories] Firestore doc exists:', doc.exists)
+    console.log('[fetchCategoriesFromFirestore] Doc exists:', doc.exists)
 
     if (doc.exists) {
       const data = doc.data()
       const categoryKeys = data?.categories ? Object.keys(data.categories) : []
-      console.log('[getCategories] Category keys from Firestore:', categoryKeys)
+      console.log('[fetchCategoriesFromFirestore] Category keys:', categoryKeys)
 
       if (data?.categories && categoryKeys.length > 0) {
-        console.log('[getCategories] Returning', categoryKeys.length, 'categories from Firestore')
+        console.log('[fetchCategoriesFromFirestore] Returning', categoryKeys.length, 'categories from Firestore')
         return data.categories
       } else {
-        console.warn('[getCategories] Firestore doc exists but categories is empty or missing. Data keys:', data ? Object.keys(data) : 'null')
+        console.warn('[fetchCategoriesFromFirestore] Doc exists but categories empty')
       }
     } else {
-      console.warn('[getCategories] Firestore doc config/categories does NOT exist — will use fallback')
+      console.warn('[fetchCategoriesFromFirestore] Doc does NOT exist')
     }
   } catch (error) {
-    console.error('[getCategories] ERROR reading from Firestore:', error instanceof Error ? error.message : error)
-    console.error('[getCategories] Stack:', error instanceof Error ? error.stack : 'N/A')
+    console.error('[fetchCategoriesFromFirestore] ERROR:', error instanceof Error ? error.message : error)
+    console.error('[fetchCategoriesFromFirestore] Stack:', error instanceof Error ? error.stack : 'N/A')
   }
 
   // Fallback to static config
   const { CATEGORIES } = await import('./document-categories')
-  console.log('[getCategories] Using FALLBACK static CATEGORIES with', Object.keys(CATEGORIES).length, 'categories')
+  console.log('[fetchCategoriesFromFirestore] Using FALLBACK static CATEGORIES with', Object.keys(CATEGORIES).length, 'categories')
   return CATEGORIES
+}
+
+/**
+ * Invalidate categories cache (call when categories are updated in Firestore)
+ */
+export function invalidateCategoriesCache(): void {
+  console.log('[invalidateCategoriesCache] Clearing cache')
+  categoriesCache.data = null
+  categoriesCache.timestamp = 0
+  categoriesCache.loading = null
 }
