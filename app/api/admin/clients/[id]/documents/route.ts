@@ -28,7 +28,17 @@ export async function GET(
       )
     }
 
-    const phone = clientDoc.data()?.phone
+    const clientData = clientDoc.data()
+    const phones = clientData?.phones
+
+    if (!phones || !Array.isArray(phones) || phones.length === 0) {
+      return NextResponse.json(
+        { error: 'Client has no phone numbers associated' },
+        { status: 400 }
+      )
+    }
+
+    const phone = phones[0]
 
     const snapshot = await db.collection('documents')
       .where('phone', '==', phone)
@@ -81,7 +91,17 @@ export async function POST(
       )
     }
 
-    const phone = clientDoc.data()?.phone
+    const clientData = clientDoc.data()
+    const phones = clientData?.phones
+
+    if (!phones || !Array.isArray(phones) || phones.length === 0) {
+      return NextResponse.json(
+        { error: 'Client has no phone numbers associated' },
+        { status: 400 }
+      )
+    }
+
+    const phone = phones[0]
 
     const { title, filePath, category, fiscalYear, subCategory } = await req.json()
 

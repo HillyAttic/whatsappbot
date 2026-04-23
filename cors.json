@@ -1,8 +1,12 @@
 [
   {
-    "origin": ["https://whatsappchatbot-one.vercel.app", "http://localhost:3000"],
-    "method": ["PUT"],
-    "responseHeader": ["Content-Type"],
+    "origin": [
+      "https://helpdesk.jpcoca.in",
+      "https://whatsappchatbot-one.vercel.app",
+      "http://localhost:3000"
+    ],
+    "method": ["GET", "PUT", "POST", "DELETE", "HEAD"],
+    "responseHeader": ["Content-Type", "Content-Length", "Content-Range"],
     "maxAgeSeconds": 3600
   }
 ]

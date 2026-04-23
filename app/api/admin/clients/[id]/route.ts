@@ -113,7 +113,17 @@ export async function DELETE(
       )
     }
 
-    const phone = clientDoc.data()?.phone
+    const clientData = clientDoc.data()
+    const phones = clientData?.phones
+
+    if (!phones || !Array.isArray(phones) || phones.length === 0) {
+      return NextResponse.json(
+        { error: 'Client has no phone numbers associated' },
+        { status: 400 }
+      )
+    }
+
+    const phone = phones[0]
 
     // Get all documents for this client
     const docsSnapshot = await db.collection('documents').where('phone', '==', phone).get()
