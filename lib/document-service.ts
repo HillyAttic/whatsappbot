@@ -183,7 +183,7 @@ export async function getDocuments(phone: string): Promise<Document[]> {
     // Combine all documents and deduplicate by ID
     const documentsMap = new Map()
     snapshots.forEach(snapshot => {
-      snapshot.docs.forEach(doc => {
+      snapshot.docs.forEach((doc: any) => {
         if (!documentsMap.has(doc.id)) {
           documentsMap.set(doc.id, {
             id: doc.id,
@@ -262,7 +262,7 @@ export async function getFilteredDocuments(
     // Combine all documents and deduplicate by ID
     const documentsMap = new Map()
     snapshots.forEach(snapshot => {
-      snapshot.docs.forEach(doc => {
+      snapshot.docs.forEach((doc: any) => {
         if (!documentsMap.has(doc.id)) {
           documentsMap.set(doc.id, {
             id: doc.id,
@@ -284,40 +284,6 @@ export async function getFilteredDocuments(
     console.log('[getFilteredDocuments] Found', documents.length, 'documents')
 
     return documents
-  } catch (error) {
-    console.error('[getFilteredDocuments] ERROR:', error)
-    console.error('[getFilteredDocuments] Query params:', {
-      normalizedPhone,
-      category,
-      fiscalYear,
-      subCategory
-    })
-    throw error
-  }
-}
-    let query = db
-      .collection('documents')
-      .where('phone', '==', normalizedPhone)
-      .where('category', '==', category)
-
-    if (fiscalYear) {
-      query = query.where('fiscalYear', '==', fiscalYear)
-    }
-
-    if (subCategory) {
-      query = query.where('subCategory', '==', subCategory)
-    }
-
-    const snapshot = await query.get()
-
-    console.log('[getFilteredDocuments] Found', snapshot.size, 'documents')
-
-    const docs = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as Document[]
-
-    return docs.sort((a, b) => (b.uploadedAt || '').localeCompare(a.uploadedAt || ''))
   } catch (error) {
     console.error('[getFilteredDocuments] ERROR:', error)
     console.error('[getFilteredDocuments] Query params:', {
