@@ -11,14 +11,14 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: '#7c3aed',
     icons: [
       {
-        src: '/icon-192.svg',
+        src: '/registration_karo_logo.png',
         sizes: '192x192',
-        type: 'image/svg+xml',
+        type: 'image/png',
       },
       {
-        src: '/icon-512.svg',
+        src: '/registration_karo_logo.png',
         sizes: '512x512',
-        type: 'image/svg+xml',
+        type: 'image/png',
       },
     ],
   }

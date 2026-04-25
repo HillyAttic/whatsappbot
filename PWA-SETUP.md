@@ -18,8 +18,7 @@ Your Next.js app is now a Progressive Web App (PWA) with offline support!
 - `next.config.js` - Serwist integration
 - `tsconfig.json` - Added webworker types
 - `.env.local` - Added Turbopack warning suppression
-- `public/icon-192.svg` - App icon (192x192)
-- `public/icon-512.svg` - App icon (512x512)
+- `public/registration_karo_logo.png` - App icon
 
 ## Caching Strategy
 
@@ -50,8 +49,8 @@ Then visit `http://localhost:3000` and:
 ## Customization
 
 ### Replace Icons
-Replace `public/icon-192.svg` and `public/icon-512.svg` with your actual logo.
-For PNG icons, convert the SVGs and update `app/manifest.ts`.
+The app uses `public/registration_karo_logo.png` as the PWA icon.
+To change it, replace this file and update `app/manifest.ts`.
 
 ### Adjust Caching
 Edit `app/sw.ts` to customize caching strategies for your needs.
