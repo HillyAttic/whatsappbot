@@ -26,9 +26,14 @@ export default function ClientForm({ initial, onSubmit, onCancel, loading = fals
   const handlePhoneChange = (index: number, value: string) => {
     let processedValue = value.trim()
 
-    // If user enters exactly 10 digits without +91, auto-add it
+    // Strip leading + if present
+    if (processedValue.startsWith('+')) {
+      processedValue = processedValue.substring(1)
+    }
+
+    // If user enters exactly 10 digits without 91, auto-add it
     if (/^\d{10}$/.test(processedValue)) {
-      processedValue = '+91' + processedValue
+      processedValue = '91' + processedValue
     }
 
     const newPhones = [...phones]
@@ -68,12 +73,17 @@ export default function ClientForm({ initial, onSubmit, onCancel, loading = fals
       const seenPhones = new Set<string>()
 
       filledPhones.forEach((phone, index) => {
-        const trimmed = phone.trim()
+        let trimmed = phone.trim()
 
-        if (!trimmed.startsWith('+91')) {
-          phoneErrors[index] = 'Phone number must include country code (start with +91)'
-        } else if (trimmed.length !== 13) {
-          phoneErrors[index] = 'Phone number must be exactly 12 digits plus the + sign'
+        // Strip leading + for validation
+        if (trimmed.startsWith('+')) {
+          trimmed = trimmed.substring(1)
+        }
+
+        if (!trimmed.startsWith('91')) {
+          phoneErrors[index] = 'Phone number must include country code (start with 91)'
+        } else if (trimmed.length !== 12) {
+          phoneErrors[index] = 'Phone number must be exactly 12 digits (91 + 10 digits)'
         } else if (seenPhones.has(trimmed)) {
           phoneErrors[index] = 'This phone number is already added'
         } else {
@@ -134,10 +144,10 @@ export default function ClientForm({ initial, onSubmit, onCancel, loading = fals
                   type="text"
                   value={phone}
                   onChange={(e) => handlePhoneChange(index, e.target.value)}
-                  placeholder="+919823860000 or 9823860000"
+                  placeholder="919823860000 or 9823860000"
                   className="w-full px-4 py-3 bg-surface border-2 border-ink/10 rounded-none text-sm text-ink placeholder:text-ink-muted focus:outline-none focus:border-accent transition-all font-mono"
                 />
-                {errors.phones?.[index] && (
+                {errors.phones?.[index] && errors.phones[index] !== 'At least one phone number is required' && (
                   <p className="text-danger text-xs mt-1.5 font-medium">{errors.phones[index]}</p>
                 )}
               </div>
@@ -168,7 +178,7 @@ export default function ClientForm({ initial, onSubmit, onCancel, loading = fals
             Add Phone Number
           </button>
         )}
-        {errors.phones?.[0] && !errors.phones.some((_, i) => i > 0) && (
+        {errors.phones?.[0] && typeof errors.phones[0] === 'string' && errors.phones[0] === 'At least one phone number is required' && (
           <p className="text-danger text-xs mt-1.5 font-medium">{errors.phones[0]}</p>
         )}
       </div>
