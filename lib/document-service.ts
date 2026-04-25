@@ -163,18 +163,48 @@ export async function getDocuments(phone: string): Promise<Document[]> {
   console.log('[getDocuments] Fetching documents for phone:', normalizedPhone)
 
   try {
-    const snapshot = await db
-      .collection('documents')
-      .where('phone', '==', normalizedPhone)
-      .orderBy('uploadedAt', 'desc')
-      .get()
+    // First, find the user to get all their phone numbers
+    const user = await findUser(normalizedPhone)
 
-    console.log('[getDocuments] Found', snapshot.size, 'documents')
+    if (!user || !user.phones || user.phones.length === 0) {
+      console.log('[getDocuments] User not found or has no phone numbers')
+      return []
+    }
 
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as Document[]
+    // Query documents for all phone numbers associated with this user
+    const phoneQueries = user.phones.map(userPhone =>
+      db.collection('documents')
+        .where('phone', '==', userPhone)
+        .get()
+    )
+
+    const snapshots = await Promise.all(phoneQueries)
+
+    // Combine all documents and deduplicate by ID
+    const documentsMap = new Map()
+    snapshots.forEach(snapshot => {
+      snapshot.docs.forEach(doc => {
+        if (!documentsMap.has(doc.id)) {
+          documentsMap.set(doc.id, {
+            id: doc.id,
+            ...doc.data(),
+          })
+        }
+      })
+    })
+
+    const documents = Array.from(documentsMap.values()) as Document[]
+
+    // Sort by uploadedAt descending
+    documents.sort((a, b) => {
+      const dateA = new Date(a.uploadedAt || 0).getTime()
+      const dateB = new Date(b.uploadedAt || 0).getTime()
+      return dateB - dateA
+    })
+
+    console.log('[getDocuments] Found', documents.length, 'documents across', user.phones.length, 'phone numbers')
+
+    return documents
   } catch (error) {
     console.error('[getDocuments] ERROR:', error)
     console.error('[getDocuments] Phone:', normalizedPhone)
@@ -202,6 +232,69 @@ export async function getFilteredDocuments(
   })
 
   try {
+    // First, find the user to get all their phone numbers
+    const user = await findUser(normalizedPhone)
+
+    if (!user || !user.phones || user.phones.length === 0) {
+      console.log('[getFilteredDocuments] User not found or has no phone numbers')
+      return []
+    }
+
+    // Build queries for all phone numbers
+    const phoneQueries = user.phones.map(userPhone => {
+      let query: any = db.collection('documents')
+        .where('phone', '==', userPhone)
+        .where('category', '==', category)
+
+      if (fiscalYear) {
+        query = query.where('fiscalYear', '==', fiscalYear)
+      }
+
+      if (subCategory) {
+        query = query.where('subCategory', '==', subCategory)
+      }
+
+      return query.get()
+    })
+
+    const snapshots = await Promise.all(phoneQueries)
+
+    // Combine all documents and deduplicate by ID
+    const documentsMap = new Map()
+    snapshots.forEach(snapshot => {
+      snapshot.docs.forEach(doc => {
+        if (!documentsMap.has(doc.id)) {
+          documentsMap.set(doc.id, {
+            id: doc.id,
+            ...doc.data(),
+          })
+        }
+      })
+    })
+
+    const documents = Array.from(documentsMap.values()) as Document[]
+
+    // Sort by uploadedAt descending
+    documents.sort((a, b) => {
+      const dateA = new Date(a.uploadedAt || 0).getTime()
+      const dateB = new Date(b.uploadedAt || 0).getTime()
+      return dateB - dateA
+    })
+
+    console.log('[getFilteredDocuments] Found', documents.length, 'documents')
+
+    return documents
+  } catch (error) {
+    console.error('[getFilteredDocuments] ERROR:', error)
+    console.error('[getFilteredDocuments] Query params:', {
+      normalizedPhone,
+      category,
+      fiscalYear,
+      subCategory
+    })
+    throw error
+  }
+}
     let query = db
       .collection('documents')
       .where('phone', '==', normalizedPhone)

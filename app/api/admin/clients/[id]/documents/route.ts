@@ -38,16 +38,29 @@ export async function GET(
       )
     }
 
-    const phone = phones[0]
+    // Query documents for all phone numbers associated with this client
+    const phoneQueries = phones.map(phone =>
+      db.collection('documents')
+        .where('phone', '==', phone)
+        .get()
+    )
 
-    const snapshot = await db.collection('documents')
-      .where('phone', '==', phone)
-      .get()
+    const snapshots = await Promise.all(phoneQueries)
 
-    const documents = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }))
+    // Combine all documents and deduplicate by ID
+    const documentsMap = new Map()
+    snapshots.forEach(snapshot => {
+      snapshot.docs.forEach(doc => {
+        if (!documentsMap.has(doc.id)) {
+          documentsMap.set(doc.id, {
+            id: doc.id,
+            ...doc.data()
+          })
+        }
+      })
+    })
+
+    const documents = Array.from(documentsMap.values())
 
     documents.sort((a: any, b: any) => {
       const dateA = new Date(a.uploadedAt || 0).getTime()
