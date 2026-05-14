@@ -51,18 +51,8 @@ export async function PUT(
       }
     }
 
-    // Normalize and check phone uniqueness (excluding current client)
+    // Normalize phones
     const normalizedPhones = phones.map(p => normalizePhone(p))
-    for (const phone of normalizedPhones) {
-      const phoneSnapshot = await db.collection('users').where('phones', 'array-contains', phone).limit(2).get()
-      const otherClientsWithPhone = phoneSnapshot.docs.filter(doc => doc.id !== params.id)
-      if (otherClientsWithPhone.length > 0) {
-        return NextResponse.json(
-          { error: `Phone number ${phone} already exists for another client` },
-          { status: 400 }
-        )
-      }
-    }
 
     const updateData: any = {
       name,

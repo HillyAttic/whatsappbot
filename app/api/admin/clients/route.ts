@@ -74,17 +74,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Normalize and check phone uniqueness
+    // Normalize phones
     const normalizedPhones = phones.map(p => normalizePhone(p))
-    for (const phone of normalizedPhones) {
-      const phoneSnapshot = await db.collection('users').where('phones', 'array-contains', phone).limit(1).get()
-      if (!phoneSnapshot.empty) {
-        return NextResponse.json(
-          { error: `Phone number ${phone} already exists for another client` },
-          { status: 400 }
-        )
-      }
-    }
 
     const docData: any = {
       name,

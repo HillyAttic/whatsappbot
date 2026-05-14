@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 import {
   parseWebhookPayload,
   sanitizeMessageBody,
-  findUser,
+  findAllUsersByPhone,
   getBotSession,
   saveBotSession,
 } from '@/lib/document-service'
@@ -124,10 +124,10 @@ async function handleMessage(parsed: {
     const normalizedPhone = normalizePhone(from)
     const sanitizedText = sanitizeMessageBody(text)
 
-    // Look up user
-    const user = await findUser(normalizedPhone)
+    // Look up all users associated with this phone number
+    const users = await findAllUsersByPhone(normalizedPhone)
 
-    if (!user) {
+    if (users.length === 0) {
       await sendMessage(
         from,
         'Hello \u{1F44B}\n\nWe could not find your account in our system.\n\nPlease contact support or register to access your documents.'
@@ -138,8 +138,11 @@ async function handleMessage(parsed: {
     // Get existing session
     const session = await getBotSession(normalizedPhone)
 
+    // Prepare available clients for bot flow
+    const availableClients = users.map(u => ({ id: u.id, name: u.name }))
+
     // Process message through bot flow engine
-    const result = await processMessage(normalizedPhone, sanitizedText, session, interactiveReplyId)
+    const result = await processMessage(normalizedPhone, sanitizedText, session, interactiveReplyId, availableClients)
 
     // Save updated session
     if (result.session) {

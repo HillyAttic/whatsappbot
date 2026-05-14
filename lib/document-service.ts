@@ -196,26 +196,70 @@ export async function findUserWithId(phone: string): Promise<UserWithId | null> 
 }
 
 /**
+ * Find all users by phone number and return with document IDs
+ * Used for multi-client phone number support
+ */
+export async function findAllUsersByPhone(phone: string): Promise<UserWithId[]> {
+  const normalizedPhone = normalizePhone(phone)
+  const db = getFirestore()
+
+  // Try new format (phones array)
+  let snapshot = await db.collection('users')
+    .where('phones', 'array-contains', normalizedPhone)
+    .get()
+
+  // Fallback to old format (phone string) for backward compatibility
+  if (snapshot.empty) {
+    snapshot = await db.collection('users')
+      .where('phone', '==', normalizedPhone)
+      .get()
+  }
+
+  if (snapshot.empty) {
+    return []
+  }
+
+  return snapshot.docs.map(doc => {
+    const data = doc.data()
+    return {
+      id: doc.id,
+      phones: data.phones || (data.phone ? [data.phone] : []),
+      name: data.name,
+      gstNumber: data.gstNumber
+    }
+  })
+}
+
+/**
  * Get all documents for a user by clientId
  */
-export async function getDocuments(phone: string): Promise<Document[]> {
+export async function getDocuments(phone: string, clientId?: string): Promise<Document[]> {
   const db = getFirestore()
   const normalizedPhone = normalizePhone(phone)
 
-  console.log('[getDocuments] Fetching documents for phone:', normalizedPhone)
+  console.log('[getDocuments] Fetching documents for phone:', normalizedPhone, 'clientId:', clientId)
 
   try {
-    // Find user to get clientId
-    const user = await findUserWithId(normalizedPhone)
+    let userId: string
 
-    if (!user) {
-      console.log('[getDocuments] User not found')
-      return []
+    if (clientId) {
+      // Use provided clientId directly
+      userId = clientId
+    } else {
+      // Find user to get clientId
+      const user = await findUserWithId(normalizedPhone)
+
+      if (!user) {
+        console.log('[getDocuments] User not found')
+        return []
+      }
+
+      userId = user.id
     }
 
     // Query by clientId
     const snapshot = await db.collection('documents')
-      .where('clientId', '==', user.id)
+      .where('clientId', '==', userId)
       .orderBy('uploadedAt', 'desc')
       .get()
 
@@ -224,7 +268,7 @@ export async function getDocuments(phone: string): Promise<Document[]> {
       ...doc.data(),
     })) as Document[]
 
-    console.log('[getDocuments] Found', documents.length, 'documents for client', user.id)
+    console.log('[getDocuments] Found', documents.length, 'documents for client', userId)
 
     return documents
   } catch (error) {
@@ -241,7 +285,8 @@ export async function getFilteredDocuments(
   phone: string,
   category: string,
   fiscalYear?: string,
-  subCategory?: string
+  subCategory?: string,
+  clientId?: string
 ): Promise<Document[]> {
   const db = getFirestore()
   const normalizedPhone = normalizePhone(phone)
@@ -250,21 +295,31 @@ export async function getFilteredDocuments(
     normalizedPhone,
     category,
     fiscalYear,
-    subCategory
+    subCategory,
+    clientId
   })
 
   try {
-    // Find user to get clientId
-    const user = await findUserWithId(normalizedPhone)
+    let userId: string
 
-    if (!user) {
-      console.log('[getFilteredDocuments] User not found')
-      return []
+    if (clientId) {
+      // Use provided clientId directly
+      userId = clientId
+    } else {
+      // Find user to get clientId
+      const user = await findUserWithId(normalizedPhone)
+
+      if (!user) {
+        console.log('[getFilteredDocuments] User not found')
+        return []
+      }
+
+      userId = user.id
     }
 
     // Build query with clientId
     let query: any = db.collection('documents')
-      .where('clientId', '==', user.id)
+      .where('clientId', '==', userId)
       .where('category', '==', category)
 
     if (fiscalYear) {
@@ -277,7 +332,7 @@ export async function getFilteredDocuments(
 
     const snapshot = await query.get()
 
-    const documents = snapshot.docs.map(doc => ({
+    const documents = snapshot.docs.map((doc: FirebaseFirestore.QueryDocumentSnapshot) => ({
       id: doc.id,
       ...doc.data(),
     })) as Document[]

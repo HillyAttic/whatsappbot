@@ -10,6 +10,9 @@ export interface BotSession {
   subCategory?: string
   documentList?: Document[]
   fullDocumentList?: Document[]
+  selectedClientId?: string
+  selectedClientName?: string
+  availableClients?: Array<{ id: string; name: string }>
   createdAt: string
   expiresAt: string
 }
@@ -45,6 +48,8 @@ export interface FlowResult {
 const FLOW_MESSAGES = {
   user_not_found:
     'Hello \u{1F44B}\n\nWe could not find your account in our system.\n\nPlease contact support or register to access your documents.',
+  client_selection:
+    'Hello \u{1F44B}\n\nYour phone number is associated with multiple clients.\n\nPlease select which client\'s documents you want to access:',
   category_selection:
     'Hello \u{1F44B}\n\nWelcome to JPCO Client Document Service.\n\nPlease select a document category:',
   audit_year: 'You selected: Audit Report \u{1F4CA}\n\nPlease select Financial Year:',
@@ -115,6 +120,37 @@ const STEP_INTERACTIVE: Record<string, InteractivePayload> = {
     buttonText: 'Select Type',
     sections: [],
   },
+}
+
+/**
+ * Build client selection menu for multiple clients
+ */
+function buildClientSelection(clients: Array<{ id: string; name: string }>): InteractivePayload {
+  const rows = clients.map(client => ({
+    id: client.id,
+    title: truncate(client.name, 24),
+  }))
+
+  // Use buttons for 2-3 clients, list for 4+
+  if (clients.length <= 3) {
+    return {
+      type: 'button',
+      body: FLOW_MESSAGES.client_selection,
+      buttons: rows.slice(0, 3).map(r => ({ id: r.id, title: r.title })),
+    }
+  }
+
+  return {
+    type: 'list',
+    body: FLOW_MESSAGES.client_selection,
+    buttonText: 'Select Client',
+    sections: [
+      {
+        title: 'Clients',
+        rows,
+      },
+    ],
+  }
 }
 
 /**
@@ -354,19 +390,24 @@ function buildFollowUp(): InteractivePayload {
  * Process an incoming message and return the response + updated session.
  * User verification is handled by the caller — this function is only called for verified users.
  *
- * @param interactiveReplyId - The button/list reply ID from an interactive message tap.
+ * @param phone - The user's phone number
+ * @param text - The message text
+ * @param session - The current bot session
+ * @param interactiveReplyId - The button/list reply ID from an interactive message tap
+ * @param availableClients - Array of clients associated with this phone number
  */
 export async function processMessage(
   phone: string,
   text: string,
   session: BotSession | null,
-  interactiveReplyId?: string
+  interactiveReplyId?: string,
+  availableClients?: Array<{ id: string; name: string }>
 ): Promise<FlowResult> {
   // If an interactive reply ID is present, use it as the effective input.
   // "back" maps to "#" so the existing back-handling logic works.
   let input: string
   if (interactiveReplyId) {
-    input = interactiveReplyId === 'back' ? '#' : interactiveReplyId.toLowerCase().trim()
+    input = interactiveReplyId === 'back' ? '#' : interactiveReplyId.trim()
   } else {
     input = text.toLowerCase().trim()
   }
@@ -376,23 +417,74 @@ export async function processMessage(
     session = { ...session, stepHistory: [] }
   }
 
-  // "hi" / "hello" → start fresh with category menu
+  // "hi" / "hello" → check if client selection is needed
   if (input === 'hi' || input === 'hello') {
+    // If multiple clients available, show client selection
+    if (availableClients && availableClients.length > 1) {
+      const clientSelection = buildClientSelection(availableClients)
+      const newSession = createSession('client_selection')
+      newSession.availableClients = availableClients
+      return {
+        message: clientSelection.body,
+        interactive: clientSelection,
+        session: newSession,
+      }
+    }
+
+    // Single client or no availableClients passed - proceed to category selection
     const categorySelection = await buildCategorySelection()
+    const newSession = createSession('category_selection')
+
+    // If single client, auto-select it
+    if (availableClients && availableClients.length === 1) {
+      newSession.selectedClientId = availableClients[0].id
+      newSession.selectedClientName = availableClients[0].name
+    }
+
     return {
       message: categorySelection.body,
       interactive: categorySelection,
-      session: createSession('category_selection'),
+      session: newSession,
     }
   }
 
-  // "0" / "main_menu" / "select_category" → restart to category menu
+  // Handle client selection response
+  if (session?.currentStep === 'client_selection' && session.availableClients) {
+    const selectedClient = session.availableClients.find(c => c.id === input)
+
+    if (selectedClient) {
+      const categorySelection = await buildCategorySelection()
+      const newSession = createSession('category_selection')
+      newSession.selectedClientId = selectedClient.id
+      newSession.selectedClientName = selectedClient.name
+
+      return {
+        message: `Selected: ${selectedClient.name}\n\n${categorySelection.body}`,
+        interactive: categorySelection,
+        session: newSession,
+      }
+    }
+
+    // Invalid client selection
+    const clientSelection = buildClientSelection(session.availableClients)
+    return {
+      message: FLOW_MESSAGES.invalid_input,
+      interactive: clientSelection,
+      session,
+    }
+  }
+
+  // "0" / "main_menu" / "select_category" → restart to category menu (NOT client selection)
   if ((input === '0' || input === 'main_menu' || input === 'select_category') && session) {
     const categorySelection = await buildCategorySelection()
+    const newSession = createSession('category_selection')
+    // Preserve selected client
+    newSession.selectedClientId = session.selectedClientId
+    newSession.selectedClientName = session.selectedClientName
     return {
       message: FLOW_MESSAGES.restart,
       interactive: categorySelection,
-      session: createSession('category_selection'),
+      session: newSession,
     }
   }
 
@@ -685,15 +777,20 @@ async function fetchAndListDocuments(
       phone,
       session.category!,
       session.fiscalYear,
-      session.subCategory
+      session.subCategory,
+      session.selectedClientId
     )
 
     if (documents.length === 0) {
       const categorySelection = await buildCategorySelection()
+      const newSession = createSession('category_selection')
+      // Preserve selected client
+      newSession.selectedClientId = session.selectedClientId
+      newSession.selectedClientName = session.selectedClientName
       return {
         message: FLOW_MESSAGES.no_documents,
         interactive: categorySelection,
-        session: createSession('category_selection'),
+        session: newSession,
       }
     }
 
