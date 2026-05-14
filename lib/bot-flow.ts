@@ -218,8 +218,8 @@ async function buildSubCategorySelection(
     title: sub,
   }))
 
-  // Add Download All for income tax type
-  if (step === 'income_tax_type') {
+  // Add Download All when there are multiple subcategories
+  if (subCategories.length > 1) {
     rows.unshift({ id: 'download_all', title: 'Download All' })
   }
 
