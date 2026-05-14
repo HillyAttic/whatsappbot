@@ -49,7 +49,7 @@ const FLOW_MESSAGES = {
   user_not_found:
     'Hello \u{1F44B}\n\nWe could not find your account in our system.\n\nPlease contact support or register to access your documents.',
   client_selection:
-    'Hello \u{1F44B}\n\nYour phone number is associated with multiple clients.\n\nPlease select which client\'s documents you want to access:',
+    'Hello \u{1F44B}\n\nYour phone number is associated with multiple companies.\n\nPlease select which company\'s documents you want to access:',
   category_selection:
     'Hello \u{1F44B}\n\nWelcome to JPCO Client Document Service.\n\nPlease select a document category:',
   audit_year: 'You selected: Audit Report \u{1F4CA}\n\nPlease select Financial Year:',
