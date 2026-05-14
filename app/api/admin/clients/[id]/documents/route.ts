@@ -28,45 +28,16 @@ export async function GET(
       )
     }
 
-    const clientData = clientDoc.data()
-    const phones = clientData?.phones
+    // Query documents by clientId
+    const snapshot = await db.collection('documents')
+      .where('clientId', '==', params.id)
+      .orderBy('uploadedAt', 'desc')
+      .get()
 
-    if (!phones || !Array.isArray(phones) || phones.length === 0) {
-      return NextResponse.json(
-        { error: 'Client has no phone numbers associated' },
-        { status: 400 }
-      )
-    }
-
-    // Query documents for all phone numbers associated with this client
-    const phoneQueries = phones.map(phone =>
-      db.collection('documents')
-        .where('phone', '==', phone)
-        .get()
-    )
-
-    const snapshots = await Promise.all(phoneQueries)
-
-    // Combine all documents and deduplicate by ID
-    const documentsMap = new Map()
-    snapshots.forEach(snapshot => {
-      snapshot.docs.forEach(doc => {
-        if (!documentsMap.has(doc.id)) {
-          documentsMap.set(doc.id, {
-            id: doc.id,
-            ...doc.data()
-          })
-        }
-      })
-    })
-
-    const documents = Array.from(documentsMap.values())
-
-    documents.sort((a: any, b: any) => {
-      const dateA = new Date(a.uploadedAt || 0).getTime()
-      const dateB = new Date(b.uploadedAt || 0).getTime()
-      return dateB - dateA
-    })
+    const documents = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }))
 
     return NextResponse.json(documents)
   } catch (error) {
@@ -151,6 +122,7 @@ export async function POST(
     }
 
     const docRef = await db.collection('documents').add({
+      clientId: params.id,
       phone,
       title,
       filePath,
@@ -162,6 +134,7 @@ export async function POST(
 
     return NextResponse.json({
       id: docRef.id,
+      clientId: params.id,
       phone,
       title,
       filePath,

@@ -34,6 +34,8 @@ export interface User {
 
 export interface Document {
   id: string
+  clientId?: string
+  phone?: string
   title: string
   filePath: string
   uploadedAt: string
@@ -153,8 +155,48 @@ export async function findUser(phone: string): Promise<User | null> {
   return user
 }
 
+interface UserWithId extends User {
+  id: string
+}
+
 /**
- * Get all documents for a user
+ * Find user by phone number and return with document ID
+ */
+export async function findUserWithId(phone: string): Promise<UserWithId | null> {
+  const normalizedPhone = normalizePhone(phone)
+  const db = getFirestore()
+
+  // Try new format (phones array)
+  let snapshot = await db.collection('users')
+    .where('phones', 'array-contains', normalizedPhone)
+    .limit(1)
+    .get()
+
+  // Fallback to old format (phone string)
+  if (snapshot.empty) {
+    snapshot = await db.collection('users')
+      .where('phone', '==', normalizedPhone)
+      .limit(1)
+      .get()
+  }
+
+  if (snapshot.empty) {
+    return null
+  }
+
+  const doc = snapshot.docs[0]
+  const data = doc.data()
+
+  return {
+    id: doc.id,
+    phones: data.phones || (data.phone ? [data.phone] : []),
+    name: data.name,
+    gstNumber: data.gstNumber
+  }
+}
+
+/**
+ * Get all documents for a user by clientId
  */
 export async function getDocuments(phone: string): Promise<Document[]> {
   const db = getFirestore()
@@ -163,46 +205,26 @@ export async function getDocuments(phone: string): Promise<Document[]> {
   console.log('[getDocuments] Fetching documents for phone:', normalizedPhone)
 
   try {
-    // First, find the user to get all their phone numbers
-    const user = await findUser(normalizedPhone)
+    // Find user to get clientId
+    const user = await findUserWithId(normalizedPhone)
 
-    if (!user || !user.phones || user.phones.length === 0) {
-      console.log('[getDocuments] User not found or has no phone numbers')
+    if (!user) {
+      console.log('[getDocuments] User not found')
       return []
     }
 
-    // Query documents for all phone numbers associated with this user
-    const phoneQueries = user.phones.map(userPhone =>
-      db.collection('documents')
-        .where('phone', '==', userPhone)
-        .get()
-    )
+    // Query by clientId
+    const snapshot = await db.collection('documents')
+      .where('clientId', '==', user.id)
+      .orderBy('uploadedAt', 'desc')
+      .get()
 
-    const snapshots = await Promise.all(phoneQueries)
+    const documents = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    })) as Document[]
 
-    // Combine all documents and deduplicate by ID
-    const documentsMap = new Map()
-    snapshots.forEach(snapshot => {
-      snapshot.docs.forEach((doc: any) => {
-        if (!documentsMap.has(doc.id)) {
-          documentsMap.set(doc.id, {
-            id: doc.id,
-            ...doc.data(),
-          })
-        }
-      })
-    })
-
-    const documents = Array.from(documentsMap.values()) as Document[]
-
-    // Sort by uploadedAt descending
-    documents.sort((a, b) => {
-      const dateA = new Date(a.uploadedAt || 0).getTime()
-      const dateB = new Date(b.uploadedAt || 0).getTime()
-      return dateB - dateA
-    })
-
-    console.log('[getDocuments] Found', documents.length, 'documents across', user.phones.length, 'phone numbers')
+    console.log('[getDocuments] Found', documents.length, 'documents for client', user.id)
 
     return documents
   } catch (error) {
@@ -213,7 +235,7 @@ export async function getDocuments(phone: string): Promise<Document[]> {
 }
 
 /**
- * Get documents filtered by category, fiscal year, and sub-category
+ * Get documents filtered by category, fiscal year, and sub-category using clientId
  */
 export async function getFilteredDocuments(
   phone: string,
@@ -232,47 +254,33 @@ export async function getFilteredDocuments(
   })
 
   try {
-    // First, find the user to get all their phone numbers
-    const user = await findUser(normalizedPhone)
+    // Find user to get clientId
+    const user = await findUserWithId(normalizedPhone)
 
-    if (!user || !user.phones || user.phones.length === 0) {
-      console.log('[getFilteredDocuments] User not found or has no phone numbers')
+    if (!user) {
+      console.log('[getFilteredDocuments] User not found')
       return []
     }
 
-    // Build queries for all phone numbers
-    const phoneQueries = user.phones.map(userPhone => {
-      let query: any = db.collection('documents')
-        .where('phone', '==', userPhone)
-        .where('category', '==', category)
+    // Build query with clientId
+    let query: any = db.collection('documents')
+      .where('clientId', '==', user.id)
+      .where('category', '==', category)
 
-      if (fiscalYear) {
-        query = query.where('fiscalYear', '==', fiscalYear)
-      }
+    if (fiscalYear) {
+      query = query.where('fiscalYear', '==', fiscalYear)
+    }
 
-      if (subCategory) {
-        query = query.where('subCategory', '==', subCategory)
-      }
+    if (subCategory) {
+      query = query.where('subCategory', '==', subCategory)
+    }
 
-      return query.get()
-    })
+    const snapshot = await query.get()
 
-    const snapshots = await Promise.all(phoneQueries)
-
-    // Combine all documents and deduplicate by ID
-    const documentsMap = new Map()
-    snapshots.forEach(snapshot => {
-      snapshot.docs.forEach((doc: any) => {
-        if (!documentsMap.has(doc.id)) {
-          documentsMap.set(doc.id, {
-            id: doc.id,
-            ...doc.data(),
-          })
-        }
-      })
-    })
-
-    const documents = Array.from(documentsMap.values()) as Document[]
+    const documents = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    })) as Document[]
 
     // Sort by uploadedAt descending
     documents.sort((a, b) => {

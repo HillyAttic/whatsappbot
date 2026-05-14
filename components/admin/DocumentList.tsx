@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { CATEGORIES, CATEGORY_NAMES } from '@/lib/document-categories'
+import RenameDialog from './RenameDialog'
+import ConfirmDialog from './ConfirmDialog'
 
 export interface DocumentRecord {
   id: string
@@ -152,11 +154,31 @@ function ChevronIcon({ open }: { open: boolean }) {
   )
 }
 
+interface RenameTarget {
+  type: 'category' | 'fiscalYear' | 'subCategory'
+  category: string
+  fiscalYear?: string
+  subCategory?: string
+  currentName: string
+}
+
+interface DeleteTarget {
+  type: 'category' | 'fiscalYear' | 'subCategory'
+  category: string
+  fiscalYear?: string
+  subCategory?: string
+  name: string
+}
+
 export default function DocumentList({
   documents, onEdit, onDelete, onUpload, getAuthToken,
   categoryConfig,
 }: DocumentListProps & { categoryConfig?: Record<string, { fiscalYears: string[]; subCategories: string[] }> }) {
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
+  const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
+  const [isRenaming, setIsRenaming] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const toggle = (key: string) => {
     setOpenSections(prev => {
@@ -164,6 +186,77 @@ export default function DocumentList({
       next.has(key) ? next.delete(key) : next.add(key)
       return next
     })
+  }
+
+  const handleRename = async (newName: string) => {
+    if (!renameTarget) return
+
+    try {
+      setIsRenaming(true)
+      const token = getAuthToken()
+      const response = await fetch('/api/admin/rename', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          type: renameTarget.type,
+          category: renameTarget.category,
+          fiscalYear: renameTarget.fiscalYear,
+          subCategory: renameTarget.subCategory,
+          newName
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to rename')
+      }
+
+      // Reload the page to refresh all data
+      window.location.reload()
+    } catch (error) {
+      console.error('Error renaming:', error)
+      alert('Failed to rename. Please try again.')
+    } finally {
+      setIsRenaming(false)
+      setRenameTarget(null)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+
+    try {
+      setIsDeleting(true)
+      const token = getAuthToken()
+      const response = await fetch('/api/admin/delete-category', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          type: deleteTarget.type,
+          category: deleteTarget.category,
+          fiscalYear: deleteTarget.fiscalYear,
+          subCategory: deleteTarget.subCategory
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to delete')
+      }
+
+      // Reload the page to refresh all data
+      window.location.reload()
+    } catch (error) {
+      console.error('Error deleting:', error)
+      alert('Failed to delete. Please try again.')
+    } finally {
+      setIsDeleting(false)
+      setDeleteTarget(null)
+    }
   }
 
   const getLeafDocs = (category: string, fiscalYear: string | null, subCategory: string | null) =>
@@ -188,20 +281,34 @@ export default function DocumentList({
         return (
           <div key={category} className="border-2 border-ink/8 overflow-hidden bg-white">
             {/* Category header */}
-            <div className="flex items-center gap-2.5 px-4 py-3 bg-surface/80 hover:bg-surface transition-colors cursor-pointer border-b border-ink/8"
-              onClick={() => toggle(category)}
-            >
-              <ChevronIcon open={catOpen} />
-              <div className="w-1.5 h-1.5 rounded-none bg-accent flex-shrink-0" />
-              <span className="text-sm font-bold text-ink flex-1 font-display">{category}</span>
-              {catDocCount > 0 && (
-                <span className="text-[10px] font-bold text-accent bg-accent/10 px-2 py-0.5 uppercase tracking-wider border border-accent/20">
-                  {catDocCount}
-                </span>
-              )}
-              {config.fiscalYears.length === 0 && (
-                <UploadButton onClick={() => onUpload({ category, fiscalYear: null, subCategory: null })} />
-              )}
+            <div className="flex items-center gap-2.5 px-4 py-3 bg-surface/80 hover:bg-surface transition-colors border-b border-ink/8 group">
+              <div className="flex items-center gap-2.5 flex-1 cursor-pointer" onClick={() => toggle(category)}>
+                <ChevronIcon open={catOpen} />
+                <div className="w-1.5 h-1.5 rounded-none bg-accent flex-shrink-0" />
+                <span className="text-sm font-bold text-ink flex-1 font-display">{category}</span>
+                {catDocCount > 0 && (
+                  <span className="text-[10px] font-bold text-accent bg-accent/10 px-2 py-0.5 uppercase tracking-wider border border-accent/20">
+                    {catDocCount}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setRenameTarget({ type: 'category', category, currentName: category })
+                  }}
+                  className="w-7 h-7 flex items-center justify-center hover:bg-accent/10 text-ink-muted hover:text-accent transition-colors opacity-0 group-hover:opacity-100"
+                  title="Rename category"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+                  </svg>
+                </button>
+                {config.fiscalYears.length === 0 && (
+                  <UploadButton onClick={() => onUpload({ category, fiscalYear: null, subCategory: null })} />
+                )}
+              </div>
             </div>
 
             {catOpen && (
@@ -229,23 +336,36 @@ export default function DocumentList({
                   return (
                     <div key={fy}>
                       {/* FY header */}
-                      <div
-                        className="flex items-center gap-2 pl-8 pr-4 py-2.5 hover:bg-ink/[0.02] transition-colors cursor-pointer border-b border-ink/5"
-                        onClick={() => toggle(fyKey)}
-                      >
-                        <ChevronIcon open={fyOpen} />
-                        <svg className="w-3.5 h-3.5 text-[#0c8599] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121.75 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-                        </svg>
-                        <span className="text-xs font-bold text-ink-secondary flex-1 uppercase tracking-wide">{fy}</span>
-                        {fyDocCount > 0 && (
-                          <span className="text-[10px] font-medium text-ink-muted bg-ink/5 px-1.5 py-0.5 border border-ink/10">
-                            {fyDocCount}
-                          </span>
-                        )}
-                        {config.subCategories.length === 0 && (
-                          <UploadButton onClick={() => onUpload({ category, fiscalYear: fy, subCategory: null })} />
-                        )}
+                      <div className="flex items-center gap-2 pl-8 pr-4 py-2.5 hover:bg-ink/[0.02] transition-colors border-b border-ink/5 group">
+                        <div className="flex items-center gap-2 flex-1 cursor-pointer" onClick={() => toggle(fyKey)}>
+                          <ChevronIcon open={fyOpen} />
+                          <svg className="w-3.5 h-3.5 text-[#0c8599] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121.75 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                          </svg>
+                          <span className="text-xs font-bold text-ink-secondary flex-1 uppercase tracking-wide">{fy}</span>
+                          {fyDocCount > 0 && (
+                            <span className="text-[10px] font-medium text-ink-muted bg-ink/5 px-1.5 py-0.5 border border-ink/10">
+                              {fyDocCount}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setRenameTarget({ type: 'fiscalYear', category, fiscalYear: fy, currentName: fy })
+                            }}
+                            className="w-7 h-7 flex items-center justify-center hover:bg-accent/10 text-ink-muted hover:text-accent transition-colors opacity-0 group-hover:opacity-100"
+                            title="Rename fiscal year"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+                            </svg>
+                          </button>
+                          {config.subCategories.length === 0 && (
+                            <UploadButton onClick={() => onUpload({ category, fiscalYear: fy, subCategory: null })} />
+                          )}
+                        </div>
                       </div>
 
                       {fyOpen && (
@@ -269,7 +389,7 @@ export default function DocumentList({
                             const leafDocs = getLeafDocs(category, fy, sc)
                             return (
                               <div key={sc}>
-                                <div className="flex items-center gap-2 pl-14 pr-4 py-2 bg-ink/[0.01] border-b border-ink/5">
+                                <div className="flex items-center gap-2 pl-14 pr-4 py-2 bg-ink/[0.01] border-b border-ink/5 group">
                                   <svg className="w-3.5 h-3.5 text-ink-muted flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                                   </svg>
@@ -279,6 +399,30 @@ export default function DocumentList({
                                       {leafDocs.length}
                                     </span>
                                   )}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setRenameTarget({ type: 'subCategory', category, fiscalYear: fy, subCategory: sc, currentName: sc })
+                                    }}
+                                    className="w-7 h-7 flex items-center justify-center hover:bg-accent/10 text-ink-muted hover:text-accent transition-colors opacity-0 group-hover:opacity-100"
+                                    title="Rename subcategory"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setDeleteTarget({ type: 'subCategory', category, fiscalYear: fy, subCategory: sc, name: sc })
+                                    }}
+                                    className="w-7 h-7 flex items-center justify-center hover:bg-danger/10 text-ink-muted hover:text-danger transition-colors opacity-0 group-hover:opacity-100"
+                                    title="Delete subcategory"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                    </svg>
+                                  </button>
                                   <UploadButton onClick={() => onUpload({ category, fiscalYear: fy, subCategory: sc })} />
                                 </div>
                                 <div className="pl-16 pr-2 py-1">
@@ -314,6 +458,31 @@ export default function DocumentList({
             ))}
           </div>
         </div>
+      )}
+
+      {/* Rename Dialog */}
+      {renameTarget && (
+        <RenameDialog
+          title={`Rename ${renameTarget.type === 'category' ? 'Category' : renameTarget.type === 'fiscalYear' ? 'Fiscal Year' : 'Subcategory'}`}
+          currentName={renameTarget.currentName}
+          onConfirm={handleRename}
+          onCancel={() => setRenameTarget(null)}
+          loading={isRenaming}
+        />
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {deleteTarget && (
+        <ConfirmDialog
+          message={`Delete "${deleteTarget.name}" ${deleteTarget.type}? ${
+            deleteTarget.type === 'subCategory'
+              ? 'This will remove the subcategory from the configuration but will NOT delete any documents.'
+              : 'This will remove it from the configuration but will NOT delete any documents.'
+          }`}
+          onConfirm={handleDelete}
+          onCancel={() => setDeleteTarget(null)}
+          loading={isDeleting}
+        />
       )}
     </div>
   )
