@@ -63,10 +63,14 @@ export default function DocumentForm({ initial, preset, onSubmit, onCancel, cate
     const newErrors: Partial<Record<string, string>> = {}
 
     if (!isMultiMode && !title.trim()) newErrors.title = 'Title is required.'
-    if (!category) newErrors.category = 'Category is required.'
+    
+    // Category is only required when creating new documents
+    if (!initial && !category) newErrors.category = 'Category is required.'
+    
     if (!initial && files.length === 0) newErrors.file = 'At least one file is required.'
 
-    if (catConfig) {
+    // Validate fiscal year and subcategory only if category is selected
+    if (category && catConfig) {
       if (catConfig.fiscalYears.length > 0 && !fiscalYear) {
         newErrors.fiscalYear = 'Fiscal year is required.'
       }

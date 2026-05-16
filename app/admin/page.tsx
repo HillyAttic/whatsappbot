@@ -300,6 +300,15 @@ export default function AdminPage() {
         newFilePath = pathParts.join('/')
         await uploadFileViaSignedUrl(data.file, newFilePath)
       }
+      
+      console.log('Sending PUT request with data:', {
+        title: data.title,
+        filePath: newFilePath,
+        category: data.category,
+        fiscalYear: data.fiscalYear,
+        subCategory: data.subCategory,
+      })
+      
       const res = await fetch('/api/admin/clients/' + selectedClient.id + '/documents/' + editingDoc.id, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -311,13 +320,20 @@ export default function AdminPage() {
           subCategory: data.subCategory,
         }),
       })
-      if (!res.ok) throw new Error('Failed')
+      
+      if (!res.ok) {
+        const errorData = await res.json()
+        console.error('Update failed:', errorData)
+        throw new Error(errorData.error || 'Failed')
+      }
+      
       setEditingDoc(null)
       setDocModal(null)
       await loadDocuments(selectedClient.id)
       showToast('Document updated')
     } catch (error) {
-      showToast('Failed to update document', 'error')
+      console.error('Error updating document:', error)
+      showToast(error instanceof Error ? error.message : 'Failed to update document', 'error')
     } finally {
       setUploading(false)
     }

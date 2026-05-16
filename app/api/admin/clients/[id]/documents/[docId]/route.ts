@@ -38,11 +38,16 @@ export async function PUT(
     const phone = document?.phone
 
     const body = await req.json()
+    console.log('PUT document body:', body)
+    
     const title = body.title as string
     const newFilePath = body.filePath as string | undefined
-    const category = body.category || document?.category
+    // Handle category: if provided in body (even as empty string), use it; otherwise keep existing
+    const category = body.category !== undefined ? (body.category || null) : (document?.category ?? null)
     const fiscalYear = body.fiscalYear !== undefined ? (body.fiscalYear || null) : (document?.fiscalYear ?? null)
     const subCategory = body.subCategory !== undefined ? (body.subCategory || null) : (document?.subCategory ?? null)
+
+    console.log('Processed values:', { title, category, fiscalYear, subCategory })
 
     if (!title) {
       return NextResponse.json(
@@ -51,9 +56,21 @@ export async function PUT(
       )
     }
 
-    if (category && !CATEGORIES[category]) {
+    // Load categories from database to validate against current categories
+    let validCategories = CATEGORIES
+    try {
+      const categoriesDoc = await db.collection('config').doc('categories').get()
+      if (categoriesDoc.exists && categoriesDoc.data()?.categories) {
+        validCategories = categoriesDoc.data()!.categories
+      }
+    } catch (error) {
+      console.warn('Could not load categories from database, using defaults:', error)
+    }
+
+    // Validate category only if it's not null/empty
+    if (category && !validCategories[category]) {
       return NextResponse.json(
-        { error: 'Invalid category' },
+        { error: `Invalid category: ${category}. Valid categories are: ${Object.keys(validCategories).join(', ')}` },
         { status: 400 }
       )
     }
@@ -92,8 +109,9 @@ export async function PUT(
     })
   } catch (error) {
     console.error('Error updating document:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to update document'
     return NextResponse.json(
-      { error: 'Failed to update document' },
+      { error: 'Failed to update document', details: errorMessage },
       { status: 500 }
     )
   }
