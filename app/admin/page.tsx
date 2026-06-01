@@ -8,6 +8,7 @@ import DocumentList from '@/components/admin/DocumentList'
 import DocumentForm from '@/components/admin/DocumentForm'
 import ConfirmDialog from '@/components/admin/ConfirmDialog'
 import CategoryManager from '@/components/admin/CategoryManager'
+import PasswordConfirmDialog from '@/components/admin/PasswordConfirmDialog'
 import { CATEGORY_NAMES, CATEGORIES } from '@/lib/document-categories'
 
 interface Client {
@@ -48,6 +49,7 @@ export default function AdminPage() {
   const [categories, setCategories] = useState<Record<string, { fiscalYears: string[]; subCategories: string[] }>>(CATEGORIES)
   const [categoryModal, setCategoryModal] = useState(false)
   const [loadingCategories, setLoadingCategories] = useState(false)
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false)
 
   const [docModal, setDocModal] = useState<ModalMode>(null)
   const [editingDoc, setEditingDoc] = useState<Document | null>(null)
@@ -134,6 +136,25 @@ export default function AdminPage() {
     } finally {
       setLoadingCategories(false)
     }
+  }
+
+  const handlePasswordConfirm = async (password: string) => {
+    if (!user?.email) throw new Error('Not authenticated')
+    
+    // Verify password by attempting to login again
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: user.email, password })
+    })
+
+    if (!res.ok) {
+      throw new Error('Invalid password')
+    }
+
+    // Password verified, open categories modal
+    setShowPasswordConfirm(false)
+    setCategoryModal(true)
   }
 
   const loadDocuments = async (clientId: string) => {
@@ -387,7 +408,7 @@ export default function AdminPage() {
           <span className="eyebrow text-ink-muted">Clients</span>
           <div className="flex gap-1">
             <button
-              onClick={() => setCategoryModal(true)}
+              onClick={() => setShowPasswordConfirm(true)}
               className="w-8 h-8 flex items-center justify-center rounded-none bg-accent/15 hover:bg-accent/25 text-accent-light transition-colors border border-accent/20 hover:border-accent/40"
               title="Manage categories"
             >
@@ -526,6 +547,15 @@ export default function AdminPage() {
       </main>
 
       {/* Modals */}
+      {showPasswordConfirm && (
+        <PasswordConfirmDialog
+          onConfirm={handlePasswordConfirm}
+          onCancel={() => setShowPasswordConfirm(false)}
+          title="Confirm Your Identity"
+          message="Managing categories requires password confirmation"
+        />
+      )}
+
       {clientModal && (
         <div className="fixed inset-0 bg-ink/50 modal-backdrop flex items-center justify-center z-50 animate-fade-in" onClick={() => { setClientModal(null); setEditingClient(null) }}>
           <div className="bg-white border-2 border-ink/10 shadow-modal animate-scale-in max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>

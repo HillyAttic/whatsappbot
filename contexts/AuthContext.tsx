@@ -52,12 +52,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const data = await res.json()
         setUser(data.user)
         setToken(storedToken)
+        // Keep cookie in sync with localStorage
+        document.cookie = `auth_token=${storedToken}; path=/; SameSite=Strict`
       } else {
         localStorage.removeItem('auth_token')
+        document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict'
       }
     } catch (error) {
       console.error('Token verification failed:', error)
       localStorage.removeItem('auth_token')
+      document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict'
     } finally {
       setLoading(false)
     }
@@ -79,12 +83,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(data.user)
     setToken(data.token)
     localStorage.setItem('auth_token', data.token)
+    // Set cookie so middleware can verify the session server-side
+    document.cookie = `auth_token=${data.token}; path=/; SameSite=Strict`
   }
 
   const signOut = () => {
     setUser(null)
     setToken(null)
     localStorage.removeItem('auth_token')
+    // Clear the auth cookie
+    document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict'
   }
 
   const getToken = () => token

@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getFirestore } from '@/lib/firebase-admin'
+import { verifyAdminToken, unauthorizedResponse } from '@/lib/auth-middleware'
 
 export async function GET(req: NextRequest) {
-  try {
-    const authHeader = req.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+  const auth = await verifyAdminToken(req)
+  if (!auth.authorized) return unauthorizedResponse(auth.error)
 
+  try {
     const db = getFirestore()
     const doc = await db.collection('config').doc('categories').get()
 
@@ -23,12 +22,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  try {
-    const authHeader = req.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+  const auth = await verifyAdminToken(req)
+  if (!auth.authorized) return unauthorizedResponse(auth.error)
 
+  try {
     const { categories } = await req.json()
 
     const db = getFirestore()
