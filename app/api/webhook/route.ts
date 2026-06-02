@@ -13,6 +13,7 @@ import {
 import { normalizePhone } from '@/lib/phone'
 import { sendMessage, sendDocument, sendInteractiveButtons, sendInteractiveList, sleep } from '@/lib/message-sender'
 import { processMessage } from '@/lib/bot-flow'
+import { recordChatActivity, closeChatSession } from '@/lib/chat-logger'
 
 // In-memory deduplication cache to prevent processing the same message twice
 // (WhatsApp retries webhooks if 200 isn't received fast enough)
@@ -147,6 +148,36 @@ async function handleMessage(parsed: {
     // Save updated session
     if (result.session) {
       await saveBotSession(normalizedPhone, result.session)
+    }
+
+    // Chat activity logging — record every inbound message; close out the
+    // previous session when the user explicitly restarts the flow.
+    const isGreeting = sanitizedText.toLowerCase().trim() === 'hi' || sanitizedText.toLowerCase().trim() === 'hello'
+    const isRestart = ['0', 'main_menu', 'select_category'].includes(
+      (interactiveReplyId || sanitizedText).toLowerCase().trim()
+    )
+
+    if (isGreeting) {
+      // A new "visit" begins — close any prior session before opening one
+      await closeChatSession(normalizedPhone)
+      const primary = users[0]
+      await recordChatActivity(normalizedPhone, {
+        clientId: primary.id,
+        clientName: primary.name,
+      })
+    } else if (isRestart && result.session) {
+      // User re-entered the flow mid-session — treat as a new visit
+      await closeChatSession(normalizedPhone)
+      const primary = users[0]
+      await recordChatActivity(normalizedPhone, {
+        clientId: result.session.selectedClientId || primary.id,
+        clientName: result.session.selectedClientName || primary.name,
+      })
+    } else {
+      await recordChatActivity(normalizedPhone, {
+        clientId: result.session?.selectedClientId,
+        clientName: result.session?.selectedClientName,
+      })
     }
 
     // Send response — prioritise interactive, then documents, then document, then plain text

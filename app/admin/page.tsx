@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import ClientList from '@/components/admin/ClientList'
 import ClientForm from '@/components/admin/ClientForm'
@@ -402,6 +403,28 @@ export default function AdminPage() {
             </div>
           </div>
         </div>
+
+        {/* Top-level navigation — Reports lives at the top-left for easy access */}
+        <nav className="px-3 pt-3 pb-1 flex flex-col gap-1 border-b-2 border-sidebar-border">
+          <Link
+            href="/admin/reports"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-none bg-accent/10 hover:bg-accent/20 border border-accent/20 hover:border-accent/40 transition-colors group"
+            title="Open Reports"
+          >
+            <span className="w-7 h-7 flex items-center justify-center bg-accent text-white shadow-bold">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+              </svg>
+            </span>
+            <span className="flex-1">
+              <span className="block text-ink-inverse text-sm font-display font-bold tracking-tight leading-none">Reports</span>
+              <span className="block text-ink-muted text-[10px] font-mono uppercase tracking-widest mt-0.5">Chat &amp; Clients</span>
+            </span>
+            <svg className="w-3.5 h-3.5 text-accent-light opacity-70 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+            </svg>
+          </Link>
+        </nav>
 
         {/* Sidebar toolbar */}
         <div className="px-6 pt-4 pb-2 flex items-center justify-between">

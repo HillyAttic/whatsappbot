@@ -1,5 +1,6 @@
 import { Document, getFilteredDocuments, getCategories } from './document-service'
 import { generateSignedUrl } from './storage-service'
+import { recordDocumentAccess } from './chat-logger'
 
 export interface BotSession {
   currentStep: string
@@ -671,6 +672,25 @@ export async function processMessage(
           })
         )
 
+        // Audit log: every doc delivered
+        const accessStamp = new Date().toISOString()
+        await Promise.all(
+          documents.map((d) =>
+            recordDocumentAccess({
+              phone,
+              clientId: session.selectedClientId,
+              clientName: session.selectedClientName,
+              documentId: d.id,
+              documentTitle: d.title,
+              category: session.category,
+              fiscalYear: session.fiscalYear ?? null,
+              subCategory: session.subCategory ?? null,
+              accessedAt: accessStamp,
+              source: 'whatsapp',
+            })
+          )
+        )
+
         return {
           message: '',
           documents: signedDocs,
@@ -718,6 +738,26 @@ export async function processMessage(
             return { url, filename, caption: `Here is your document \u{1F4C4}\n\n${d.title}` }
           })
         )
+
+        // Audit log: every doc delivered via Download All
+        const accessStamp = new Date().toISOString()
+        await Promise.all(
+          docs.map((d) =>
+            recordDocumentAccess({
+              phone,
+              clientId: session.selectedClientId,
+              clientName: session.selectedClientName,
+              documentId: d.id,
+              documentTitle: d.title,
+              category: session.category,
+              fiscalYear: session.fiscalYear ?? null,
+              subCategory: session.subCategory ?? null,
+              accessedAt: accessStamp,
+              source: 'whatsapp',
+            })
+          )
+        )
+
         return {
           message: '',
           documents: signedDocs,
@@ -742,6 +782,21 @@ export async function processMessage(
     try {
       const signedUrl = await generateSignedUrl(doc.filePath)
       const filename = doc.filePath.split('/').pop() || doc.title
+
+      // Audit log: single-doc delivery
+      await recordDocumentAccess({
+        phone,
+        clientId: session.selectedClientId,
+        clientName: session.selectedClientName,
+        documentId: doc.id,
+        documentTitle: doc.title,
+        category: session.category,
+        fiscalYear: session.fiscalYear ?? null,
+        subCategory: session.subCategory ?? null,
+        accessedAt: new Date().toISOString(),
+        source: 'whatsapp',
+      })
+
       return {
         message: '',
         document: {
