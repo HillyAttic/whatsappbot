@@ -269,7 +269,7 @@ export default function DocumentList({
   const uncategorised = documents.filter(d => !d.category)
 
   const configToUse = categoryConfig || CATEGORIES
-  const categoryNames = Object.keys(configToUse)
+  const categoryNames = Object.keys(configToUse).reverse()
 
   return (
     <div className="space-y-3">
