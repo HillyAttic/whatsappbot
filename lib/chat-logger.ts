@@ -3,7 +3,8 @@ import { normalizePhone } from './phone'
 
 /**
  * Chat session record — one per distinct user "visit" (from first message
- * to inactivity / explicit close).
+ * to inactivity / explicit close). Documents use auto-generated IDs so
+ * multiple sessions per phone are preserved.
  */
 export interface ChatSessionLog {
   phone: string
@@ -23,6 +24,7 @@ export interface ChatSessionLog {
  */
 export interface DocumentAccessLog {
   phone: string
+  chatSessionId?: string
   clientId?: string
   clientName?: string
   documentId: string
@@ -37,42 +39,69 @@ export interface DocumentAccessLog {
 const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000 // 30 min — matches session expiry
 
 /**
+ * Find the active chat session document ID for a phone number.
+ * Returns null if no active session exists.
+ */
+async function findActiveSessionId(phone: string): Promise<string | null> {
+  const db = getFirestore()
+  const normalized = normalizePhone(phone)
+  const snap = await db
+    .collection('chatSessions')
+    .where('phone', '==', normalized)
+    .where('status', '==', 'active')
+    .orderBy('lastMessageAt', 'desc')
+    .limit(1)
+    .get()
+  return snap.empty ? null : snap.docs[0].id
+}
+
+/**
  * Record a message from a phone number. Creates a new chat session if the
  * previous one is missing, ended, or older than the inactivity threshold;
  * otherwise appends to the existing one.
+ *
+ * Returns the chat session document ID.
  */
 export async function recordChatActivity(
   phone: string,
   fields: { clientId?: string; clientName?: string }
-): Promise<void> {
+): Promise<string | null> {
   try {
     const db = getFirestore()
     const normalized = normalizePhone(phone)
     const now = new Date()
     const nowIso = now.toISOString()
 
-    const sessionRef = db.collection('chatSessions').doc(normalized)
-    const sessionDoc = await sessionRef.get()
-    const data = sessionDoc.exists ? (sessionDoc.data() as ChatSessionLog) : null
+    // Find the current active session via query (not doc ID)
+    const activeSnap = await db
+      .collection('chatSessions')
+      .where('phone', '==', normalized)
+      .where('status', '==', 'active')
+      .orderBy('lastMessageAt', 'desc')
+      .limit(1)
+      .get()
 
-    if (data && data.status === 'active') {
+    if (!activeSnap.empty) {
+      const sessionDoc = activeSnap.docs[0]
+      const data = sessionDoc.data() as ChatSessionLog
       const last = new Date(data.lastMessageAt).getTime()
+
       if (now.getTime() - last < INACTIVITY_TIMEOUT_MS) {
         // Append to existing active session
-        await sessionRef.update({
+        await sessionDoc.ref.update({
           lastMessageAt: nowIso,
           messageCount: (data.messageCount || 0) + 1,
           // Lock in the client if it was previously unknown
           ...(data.clientId ? {} : { clientId: fields.clientId, clientName: fields.clientName }),
         })
-        return
+        return sessionDoc.id
       }
 
       // Stale active session — close it out before opening a new one
       await closeChatSession(normalized)
     }
 
-    // New session
+    // New session with auto-generated ID
     const newSession: ChatSessionLog = {
       phone: normalized,
       clientId: fields.clientId,
@@ -82,10 +111,12 @@ export async function recordChatActivity(
       messageCount: 1,
       lastMessageAt: nowIso,
     }
-    await sessionRef.set(newSession)
+    const docRef = await db.collection('chatSessions').add(newSession)
+    return docRef.id
   } catch (error) {
     // Logger must never break the bot — swallow errors with a console note
     console.error('[chat-logger] recordChatActivity failed:', error)
+    return null
   }
 }
 
@@ -97,18 +128,24 @@ export async function closeChatSession(phone: string): Promise<void> {
   try {
     const db = getFirestore()
     const normalized = normalizePhone(phone)
-    const sessionRef = db.collection('chatSessions').doc(normalized)
-    const sessionDoc = await sessionRef.get()
-    if (!sessionDoc.exists) return
 
+    const activeSnap = await db
+      .collection('chatSessions')
+      .where('phone', '==', normalized)
+      .where('status', '==', 'active')
+      .orderBy('lastMessageAt', 'desc')
+      .limit(1)
+      .get()
+
+    if (activeSnap.empty) return
+
+    const sessionDoc = activeSnap.docs[0]
     const data = sessionDoc.data() as ChatSessionLog
-    if (data.status !== 'active') return
-
     const now = new Date()
     const startedAt = new Date(data.startedAt).getTime()
     const endedAt = now.toISOString()
 
-    await sessionRef.update({
+    await sessionDoc.ref.update({
       status: 'completed',
       endedAt,
       durationMs: Math.max(0, now.getTime() - startedAt),
@@ -127,9 +164,15 @@ export async function closeChatSession(phone: string): Promise<void> {
 export async function recordDocumentAccess(entry: DocumentAccessLog): Promise<void> {
   try {
     const db = getFirestore()
+    const normalized = normalizePhone(entry.phone)
+
+    // Resolve the active chat session ID for this phone
+    const chatSessionId = await findActiveSessionId(normalized)
+
     const payload: DocumentAccessLog = {
       ...entry,
-      phone: normalizePhone(entry.phone),
+      phone: normalized,
+      ...(chatSessionId ? { chatSessionId } : {}),
     }
     await db.collection('documentAccessLogs').add(payload)
   } catch (error) {

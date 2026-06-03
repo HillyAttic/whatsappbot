@@ -4,6 +4,8 @@ import { verifyAdminToken, unauthorizedResponse } from '@/lib/auth-middleware'
 
 export const dynamic = 'force-dynamic'
 
+const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000
+
 /**
  * GET /api/admin/reports/chat-access?limit=200
  *
@@ -12,7 +14,7 @@ export const dynamic = 'force-dynamic'
  *  - sessionId (phone)            ← "User No."
  *  - clientName
  *  - date / time (startedAt formatted)
- *  - timeTaken (human-readable duration)
+ *  - timeTaken (human-readable duration from start to last document access)
  *  - documentAccessed (titles, comma-separated)
  */
 export async function GET(req: NextRequest) {
@@ -26,7 +28,7 @@ export async function GET(req: NextRequest) {
     const url = new URL(req.url)
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '200', 10) || 200, 1000)
 
-    // 1. Pull chat sessions, newest first
+    // 1. Pull all chat sessions, newest first (now with auto-generated IDs)
     const sessionsSnap = await db
       .collection('chatSessions')
       .orderBy('lastMessageAt', 'desc')
@@ -40,20 +42,33 @@ export async function GET(req: NextRequest) {
       .limit(500)
       .get()
 
-    // Group access logs by phone for quick join
+    // 3. Group access logs by chatSessionId (new data) and by phone (legacy fallback)
+    const accessBySessionId = new Map<string, Array<{ title: string; at: string }>>()
     const accessByPhone = new Map<string, Array<{ title: string; at: string }>>()
+
     for (const d of accessSnap.docs) {
       const data = d.data()
       const phone = (data.phone as string) || ''
       if (!phone) continue
-      if (!accessByPhone.has(phone)) accessByPhone.set(phone, [])
-      accessByPhone.get(phone)!.push({
-        title: (data.documentTitle as string) || 'Untitled',
-        at: (data.accessedAt as string) || '',
-      })
+
+      const title = (data.documentTitle as string) || 'Untitled'
+      const at = (data.accessedAt as string) || ''
+      const entry = { title, at }
+
+      if (data.chatSessionId) {
+        if (!accessBySessionId.has(data.chatSessionId)) {
+          accessBySessionId.set(data.chatSessionId, [])
+        }
+        accessBySessionId.get(data.chatSessionId)!.push(entry)
+      } else {
+        if (!accessByPhone.has(phone)) {
+          accessByPhone.set(phone, [])
+        }
+        accessByPhone.get(phone)!.push(entry)
+      }
     }
 
-    // 3. Resolve phone -> client name (prefer session.clientName, fall back to users lookup)
+    // 4. Resolve phone -> client name (prefer session.clientName, fall back to users lookup)
     const clientCache = new Map<string, string>()
     async function resolveClientName(phone: string, fallback?: string): Promise<string | undefined> {
       if (fallback) return fallback
@@ -97,10 +112,36 @@ export async function GET(req: NextRequest) {
       const data = s.data()
       const phone = (data.phone as string) || s.id
       const startedAt = new Date(data.startedAt || data.lastMessageAt)
-      const endedAt = data.endedAt ? new Date(data.endedAt) : null
-      const durationMs = data.durationMs ?? (endedAt ? endedAt.getTime() - startedAt.getTime() : Date.now() - startedAt.getTime())
+      const sessionStartMs = startedAt.getTime()
 
-      const docs = accessByPhone.get(phone) || []
+      // Find document accesses for this session
+      let docs = accessBySessionId.get(s.id) || []
+
+      // Legacy fallback: no chatSessionId-based matches → try phone + time window
+      if (docs.length === 0 && phone) {
+        const phoneDocs = accessByPhone.get(phone) || []
+        const sessionEndMs = data.endedAt
+          ? new Date(data.endedAt).getTime()
+          : sessionStartMs + INACTIVITY_TIMEOUT_MS
+        docs = phoneDocs.filter((d) => {
+          const accessedAt = new Date(d.at).getTime()
+          return accessedAt >= sessionStartMs && accessedAt <= sessionEndMs
+        })
+      }
+
+      // Compute timeTaken: duration from session start to latest document access
+      let timeTakenMs: number | null = null
+      if (docs.length > 0) {
+        const latestAccess = Math.max(...docs.map((d) => new Date(d.at).getTime()))
+        timeTakenMs = latestAccess - sessionStartMs
+      } else if (data.durationMs) {
+        // Fallback: completed session with no docs — use total duration
+        timeTakenMs = data.durationMs
+      }
+      // Active session with no docs: timeTakenMs stays null → shows '—'
+
+      const durationMs = timeTakenMs ?? data.durationMs ?? 0
+
       // Limit to 5 distinct titles for display
       const distinctTitles = Array.from(new Set(docs.map((d) => d.title))).slice(0, 5)
 
@@ -112,8 +153,8 @@ export async function GET(req: NextRequest) {
         clientName,
         date: startedAt.toISOString().slice(0, 10),
         time: startedAt.toISOString().slice(11, 19),
-        timeTaken: formatDuration(durationMs as number),
-        durationMs: durationMs as number,
+        timeTaken: formatDuration(durationMs),
+        durationMs,
         documentAccessed: distinctTitles.join(', ') || '—',
         documentAccessCount: docs.length,
         status: (data.status as string) || 'active',

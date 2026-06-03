@@ -71,6 +71,15 @@
         { "fieldPath": "fiscalYear", "order": "ASCENDING" },
         { "fieldPath": "subCategory", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "chatSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "phone", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "lastMessageAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
