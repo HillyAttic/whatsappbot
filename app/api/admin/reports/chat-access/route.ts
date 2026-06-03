@@ -147,12 +147,18 @@ export async function GET(req: NextRequest) {
 
       const clientName = (await resolveClientName(phone, data.clientName)) || 'Unknown'
 
+      // Format in IST (UTC+5:30)
+      const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
+      const istDate = new Date(sessionStartMs + IST_OFFSET_MS)
+      const date = istDate.toISOString().slice(0, 10)
+      const time = istDate.toISOString().slice(11, 19)
+
       rows.push({
         sessionId: s.id,
         phone,
         clientName,
-        date: startedAt.toISOString().slice(0, 10),
-        time: startedAt.toISOString().slice(11, 19),
+        date,
+        time,
         timeTaken: formatDuration(durationMs),
         durationMs,
         documentAccessed: distinctTitles.join(', ') || '—',
