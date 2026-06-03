@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
+import * as XLSX from 'xlsx'
 
 type Tab = 'chat' | 'clients'
 
@@ -42,6 +43,11 @@ export default function ReportsPage() {
   const [loadingClients, setLoadingClients] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [datePreset, setDatePreset] = useState<'all' | 'today' | 'yesterday' | '7days' | 'month' | 'custom'>('all')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [searchField, setSearchField] = useState<'all' | 'phone' | 'clientName' | 'documentAccessed' | 'status'>('all')
+  const [colFilters, setColFilters] = useState({ phone: '', clientName: '', date: '', documentAccessed: '', status: '' })
 
   const headers = () => ({ Authorization: 'Bearer ' + getToken() })
 
@@ -85,15 +91,82 @@ export default function ReportsPage() {
 
   // Filtering
   const filteredChat = useMemo(() => {
+    let rows = chatRows
+
+    // 1. Date preset filter
+    if (datePreset !== 'all' && datePreset !== 'custom') {
+      const now = new Date()
+      const todayStr = now.toISOString().slice(0, 10)
+      let startStr = ''
+      let endStr = todayStr
+
+      if (datePreset === 'today') {
+        startStr = todayStr
+      } else if (datePreset === 'yesterday') {
+        const yesterday = new Date(now)
+        yesterday.setDate(yesterday.getDate() - 1)
+        startStr = endStr = yesterday.toISOString().slice(0, 10)
+      } else if (datePreset === '7days') {
+        const weekAgo = new Date(now)
+        weekAgo.setDate(weekAgo.getDate() - 7)
+        startStr = weekAgo.toISOString().slice(0, 10)
+      } else if (datePreset === 'month') {
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+        startStr = monthStart.toISOString().slice(0, 10)
+      }
+
+      rows = rows.filter((r) => r.date >= startStr && r.date <= endStr)
+    } else if (datePreset === 'custom' && (dateFrom || dateTo)) {
+      rows = rows.filter((r) => {
+        if (dateFrom && r.date < dateFrom) return false
+        if (dateTo && r.date > dateTo) return false
+        return true
+      })
+    }
+
+    // 2. Search field filter
     const q = search.trim().toLowerCase()
-    if (!q) return chatRows
-    return chatRows.filter(
-      (r) =>
-        r.phone.includes(q) ||
-        r.clientName.toLowerCase().includes(q) ||
-        r.documentAccessed.toLowerCase().includes(q)
-    )
-  }, [chatRows, search])
+    if (q) {
+      if (searchField === 'all') {
+        rows = rows.filter(
+          (r) =>
+            r.phone.includes(q) ||
+            r.clientName.toLowerCase().includes(q) ||
+            r.documentAccessed.toLowerCase().includes(q) ||
+            r.status.toLowerCase().includes(q)
+        )
+      } else {
+        rows = rows.filter((r) => {
+          const val = r[searchField]
+          return typeof val === 'string' ? val.toLowerCase().includes(q) : false
+        })
+      }
+    }
+
+    // 3. Per-column filters
+    if (colFilters.phone) {
+      const q2 = colFilters.phone.toLowerCase()
+      rows = rows.filter((r) => r.phone.toLowerCase().includes(q2))
+    }
+    if (colFilters.clientName) {
+      const q2 = colFilters.clientName.toLowerCase()
+      rows = rows.filter((r) => r.clientName.toLowerCase().includes(q2))
+    }
+    if (colFilters.date) {
+      const q2 = colFilters.date.toLowerCase()
+      rows = rows.filter((r) => r.date.toLowerCase().includes(q2))
+    }
+    if (colFilters.documentAccessed) {
+      const q2 = colFilters.documentAccessed.toLowerCase()
+      rows = rows.filter((r) => r.documentAccessed.toLowerCase().includes(q2))
+    }
+    if (colFilters.status) {
+      const q2 = colFilters.status.toLowerCase()
+      rows = rows.filter((r) => r.status.toLowerCase().includes(q2))
+    }
+
+    return rows
+  }, [chatRows, search, searchField, datePreset, dateFrom, dateTo, colFilters])
 
   const filteredClients = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -106,6 +179,28 @@ export default function ReportsPage() {
         r.categories.some((c) => c.toLowerCase().includes(q))
     )
   }, [clientRows, search])
+
+  // Export chat access to Excel
+  function exportChatToExcel() {
+    const data = filteredChat.length > 0 ? filteredChat : chatRows
+    if (data.length === 0) return
+
+    const exportData = data.map((r) => ({
+      'User No': r.phone,
+      'Client Name': r.clientName,
+      Date: r.date,
+      Time: r.time,
+      'Time Taken': r.timeTaken,
+      'Doc Report Accessed': r.documentAccessed,
+      '# Docs': r.documentAccessCount,
+      Status: r.status,
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(exportData)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Chat Access')
+    XLSX.writeFile(wb, `chat-access-report-${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
 
   // Aggregate totals
   const totals = useMemo(() => {
@@ -239,6 +334,18 @@ export default function ReportsPage() {
                   {totals.totalChats} chats · {clientRows.length} clients · {totals.totalDocs} docs
                 </p>
               </div>
+              {tab === 'chat' && (
+                <button
+                  onClick={exportChatToExcel}
+                  className="flex items-center gap-2 px-3 py-2 bg-ink text-white text-xs font-mono uppercase tracking-wider shadow-bold hover:bg-ink/80 transition-colors"
+                  title="Export to Excel"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                  </svg>
+                  Export
+                </button>
+              )}
               <button
                 onClick={() => {
                   if (tab === 'chat') loadChat()
@@ -256,22 +363,99 @@ export default function ReportsPage() {
         </div>
 
         {/* Toolbar */}
-        <div className="px-8 py-4 border-b border-ink/10 bg-surface flex items-center gap-3">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={tab === 'clients' ? 'Search by client, phone, GST, category…' : 'Search by phone, client, document…'}
-              className="w-full px-4 py-2.5 bg-white border-2 border-ink/10 rounded-none focus:border-accent focus:outline-none text-sm text-ink placeholder:text-ink-muted/60"
-            />
-            <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-            </svg>
-          </div>
-          {error && (
-            <p className="text-danger text-xs font-medium">{error}</p>
+        <div className="px-8 py-4 border-b border-ink/10 bg-surface space-y-3">
+          {/* Date filter row — chat tab only */}
+          {tab === 'chat' && (
+            <div className="flex items-center gap-3 flex-wrap">
+              <p className="eyebrow text-ink-muted text-[10px]">Date</p>
+              <div className="flex items-center border-2 border-ink/10 bg-white">
+                {([
+                  ['all', 'All'],
+                  ['today', 'Today'],
+                  ['yesterday', 'Yesterday'],
+                  ['7days', 'Last 7 Days'],
+                  ['month', 'This Month'],
+                  ['custom', 'Custom'],
+                ] as const).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setDatePreset(key)}
+                    className={`px-3 py-1.5 text-[11px] font-mono uppercase tracking-wider transition-colors border-r border-ink/10 last:border-r-0 ${
+                      datePreset === key
+                        ? 'bg-accent text-white'
+                        : 'text-ink-secondary hover:bg-ink/5'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {datePreset === 'custom' && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="px-3 py-1.5 bg-white border-2 border-ink/10 text-sm text-ink font-mono focus:border-accent focus:outline-none"
+                  />
+                  <span className="text-ink-muted text-xs">to</span>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="px-3 py-1.5 bg-white border-2 border-ink/10 text-sm text-ink font-mono focus:border-accent focus:outline-none"
+                  />
+                </div>
+              )}
+            </div>
           )}
+
+          {/* Search row */}
+          <div className="flex items-center gap-3">
+            {tab === 'chat' && (
+              <select
+                value={searchField}
+                onChange={(e) => setSearchField(e.target.value as typeof searchField)}
+                className="px-3 py-2.5 bg-white border-2 border-ink/10 text-sm text-ink font-mono focus:border-accent focus:outline-none appearance-none cursor-pointer"
+              >
+                <option value="all">All Fields</option>
+                <option value="phone">Phone</option>
+                <option value="clientName">Client Name</option>
+                <option value="documentAccessed">Document</option>
+                <option value="status">Status</option>
+              </select>
+            )}
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={tab === 'clients' ? 'Search by client, phone, GST, category…' : 'Search by phone, client, document…'}
+                className="w-full px-4 py-2.5 bg-white border-2 border-ink/10 rounded-none focus:border-accent focus:outline-none text-sm text-ink placeholder:text-ink-muted/60"
+              />
+              <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+              </svg>
+            </div>
+            {tab === 'chat' && (search || datePreset !== 'all' || Object.values(colFilters).some(Boolean)) && (
+              <button
+                onClick={() => {
+                  setSearch('')
+                  setDatePreset('all')
+                  setDateFrom('')
+                  setDateTo('')
+                  setSearchField('all')
+                  setColFilters({ phone: '', clientName: '', date: '', documentAccessed: '', status: '' })
+                }}
+                className="px-3 py-2 text-[11px] font-mono uppercase tracking-wider text-danger hover:bg-danger/10 border border-danger/30 transition-colors"
+              >
+                Clear all
+              </button>
+            )}
+            {error && (
+              <p className="text-danger text-xs font-medium">{error}</p>
+            )}
+          </div>
         </div>
 
         {/* Body */}
@@ -279,7 +463,12 @@ export default function ReportsPage() {
           {tab === 'clients' ? (
             <ClientsSummaryTable rows={filteredClients} loading={loadingClients} />
           ) : (
-            <ChatAccessTable rows={filteredChat} loading={loadingChat} />
+            <ChatAccessTable
+              rows={filteredChat}
+              loading={loadingChat}
+              colFilters={colFilters}
+              setColFilters={setColFilters}
+            />
           )}
         </div>
       </main>
@@ -385,7 +574,17 @@ function ClientsSummaryTable({ rows, loading }: { rows: ClientSummaryRow[]; load
 // ---------------------------------------------------------------------------
 // Chat Access Table (Report #1)
 // ---------------------------------------------------------------------------
-function ChatAccessTable({ rows, loading }: { rows: ChatAccessRow[]; loading: boolean }) {
+function ChatAccessTable({
+  rows,
+  loading,
+  colFilters,
+  setColFilters,
+}: {
+  rows: ChatAccessRow[]
+  loading: boolean
+  colFilters: { phone: string; clientName: string; date: string; documentAccessed: string; status: string }
+  setColFilters: React.Dispatch<React.SetStateAction<{ phone: string; clientName: string; date: string; documentAccessed: string; status: string }>>
+}) {
   if (loading && rows.length === 0) {
     return <TableSkeleton rows={6} cols={6} />
   }
@@ -413,6 +612,57 @@ function ChatAccessTable({ rows, loading }: { rows: ChatAccessRow[]; loading: bo
               <Th>Doc Report Accessed</Th>
               <Th align="right"># Docs</Th>
               <Th>Status</Th>
+            </tr>
+            <tr className="border-b border-ink/10 bg-ink/[0.02]">
+              <td className="px-4 py-1.5">
+                <input
+                  type="text"
+                  value={colFilters.phone}
+                  onChange={(e) => setColFilters((f) => ({ ...f, phone: e.target.value }))}
+                  placeholder="Filter…"
+                  className="w-full px-2 py-1 bg-white border border-ink/15 text-[11px] font-mono text-ink focus:border-accent focus:outline-none placeholder:text-ink-muted/50"
+                />
+              </td>
+              <td className="px-4 py-1.5">
+                <input
+                  type="text"
+                  value={colFilters.clientName}
+                  onChange={(e) => setColFilters((f) => ({ ...f, clientName: e.target.value }))}
+                  placeholder="Filter…"
+                  className="w-full px-2 py-1 bg-white border border-ink/15 text-[11px] font-mono text-ink focus:border-accent focus:outline-none placeholder:text-ink-muted/50"
+                />
+              </td>
+              <td className="px-4 py-1.5">
+                <input
+                  type="date"
+                  value={colFilters.date}
+                  onChange={(e) => setColFilters((f) => ({ ...f, date: e.target.value }))}
+                  className="w-full px-2 py-1 bg-white border border-ink/15 text-[11px] font-mono text-ink focus:border-accent focus:outline-none"
+                />
+              </td>
+              <td className="px-4 py-1.5" />
+              <td className="px-4 py-1.5" />
+              <td className="px-4 py-1.5">
+                <input
+                  type="text"
+                  value={colFilters.documentAccessed}
+                  onChange={(e) => setColFilters((f) => ({ ...f, documentAccessed: e.target.value }))}
+                  placeholder="Filter…"
+                  className="w-full px-2 py-1 bg-white border border-ink/15 text-[11px] font-mono text-ink focus:border-accent focus:outline-none placeholder:text-ink-muted/50"
+                />
+              </td>
+              <td className="px-4 py-1.5" />
+              <td className="px-4 py-1.5">
+                <select
+                  value={colFilters.status}
+                  onChange={(e) => setColFilters((f) => ({ ...f, status: e.target.value }))}
+                  className="w-full px-2 py-1 bg-white border border-ink/15 text-[11px] font-mono text-ink focus:border-accent focus:outline-none appearance-none cursor-pointer"
+                >
+                  <option value="">All</option>
+                  <option value="active">Active</option>
+                  <option value="completed">Completed</option>
+                </select>
+              </td>
             </tr>
           </thead>
           <tbody>
