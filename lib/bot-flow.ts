@@ -159,7 +159,8 @@ function buildClientSelection(clients: Array<{ id: string; name: string }>): Int
  */
 async function buildCategorySelection(): Promise<InteractivePayload> {
   const categories = await getCategories()
-  const rows = Object.keys(categories).map((name, index) => ({
+  // Reverse to match admin dashboard order (DocumentList uses .reverse())
+  const rows = Object.keys(categories).reverse().map((name, index) => ({
     id: String(index + 1),
     title: truncate(name, 24),
   }))
@@ -249,7 +250,8 @@ async function buildCategoryMap(): Promise<
   Record<string, { step: string; category: string; hasFiscalYears: boolean; hasSubCategories: boolean }>
 > {
   const categories = await getCategories()
-  const categoryNames = Object.keys(categories)
+  // Reverse to match admin dashboard order (DocumentList uses .reverse())
+  const categoryNames = Object.keys(categories).reverse()
   console.log('[buildCategoryMap] Categories from cache/DB:', categoryNames)
 
   const map: Record<string, { step: string; category: string; hasFiscalYears: boolean; hasSubCategories: boolean }> = {}
@@ -513,7 +515,7 @@ export async function processMessage(
     if (backStep.endsWith('_year_selection')) {
       const categoryId = backStep.replace('_year_selection', '')
       const categories = await getCategories()
-      const categoryName = Object.keys(categories)[parseInt(categoryId) - 1]
+      const categoryName = Object.keys(categories).reverse()[parseInt(categoryId) - 1]
       const config = categories[categoryName]
       const yearSelection = await buildYearSelection('category_year', categoryName, config.fiscalYears)
       return {
@@ -527,7 +529,7 @@ export async function processMessage(
     if (backStep.endsWith('_sub_selection')) {
       const categoryId = backStep.replace('_sub_selection', '')
       const categories = await getCategories()
-      const categoryName = Object.keys(categories)[parseInt(categoryId) - 1]
+      const categoryName = Object.keys(categories).reverse()[parseInt(categoryId) - 1]
       const config = categories[categoryName]
       const subSelection = await buildSubCategorySelection('category_sub', config.subCategories)
       return {
@@ -615,7 +617,7 @@ export async function processMessage(
   if (step.endsWith('_year_selection')) {
     const categoryId = step.replace('_year_selection', '')
     const categories = await getCategories()
-    const categoryName = Object.keys(categories)[parseInt(categoryId) - 1]
+    const categoryName = Object.keys(categories).reverse()[parseInt(categoryId) - 1]
     const config = categories[categoryName]
 
     const yearMap = buildYearMapForCategory(categoryId, config.fiscalYears, config.subCategories.length > 0)
@@ -647,7 +649,7 @@ export async function processMessage(
   if (step.endsWith('_sub_selection')) {
     const categoryId = session.categoryId || step.replace('_sub_selection', '')
     const categories = await getCategories()
-    const categoryName = Object.keys(categories)[parseInt(categoryId) - 1]
+    const categoryName = Object.keys(categories).reverse()[parseInt(categoryId) - 1]
     const config = categories[categoryName]
 
     // Download All for sub-category steps with download_all option
