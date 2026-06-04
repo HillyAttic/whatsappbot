@@ -29,6 +29,7 @@ interface DocumentListProps {
   onUpload: (preset: UploadPreset) => void
   getAuthToken: () => string | null
   categoryConfig?: Record<string, { fiscalYears: string[]; subCategories: string[] }>
+  onDocumentsChanged?: () => void
 }
 
 type FileExt = 'pdf' | 'doc' | 'docx' | 'xls' | 'xlsx' | 'jpg' | 'jpeg' | 'png' | 'gif' | string
@@ -172,7 +173,7 @@ interface DeleteTarget {
 
 export default function DocumentList({
   documents, onEdit, onDelete, onUpload, getAuthToken,
-  categoryConfig,
+  categoryConfig, onDocumentsChanged,
 }: DocumentListProps & { categoryConfig?: Record<string, { fiscalYears: string[]; subCategories: string[] }> }) {
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
   const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null)
@@ -213,8 +214,48 @@ export default function DocumentList({
         throw new Error('Failed to rename')
       }
 
-      // Reload the page to refresh all data
-      window.location.reload()
+      // Update open sections keys to reflect the renamed item
+      setOpenSections(prev => {
+        const next = new Set<string>()
+        const oldName = renameTarget.currentName
+
+        if (renameTarget.type === 'category') {
+          // Update category key and any fiscal year keys that contain this category
+          for (const key of prev) {
+            if (key === oldName) {
+              next.add(newName)
+            } else if (key.startsWith(`${oldName}||`)) {
+              next.add(key.replace(`${oldName}||`, `${newName}||`))
+            } else {
+              next.add(key)
+            }
+          }
+        } else if (renameTarget.type === 'fiscalYear') {
+          // Update fiscal year keys that contain this FY
+          const category = renameTarget.category
+          const oldFyKey = `${category}||${oldName}`
+          const newFyKey = `${category}||${newName}`
+          for (const key of prev) {
+            if (key === oldFyKey) {
+              next.add(newFyKey)
+            } else {
+              next.add(key)
+            }
+          }
+        } else {
+          // Subcategory rename doesn't affect open sections
+          for (const key of prev) {
+            next.add(key)
+          }
+        }
+
+        return next
+      })
+
+      // Refresh documents from parent
+      if (onDocumentsChanged) {
+        onDocumentsChanged()
+      }
     } catch (error) {
       console.error('Error renaming:', error)
       alert('Failed to rename. Please try again.')
@@ -248,8 +289,37 @@ export default function DocumentList({
         throw new Error('Failed to delete')
       }
 
-      // Reload the page to refresh all data
-      window.location.reload()
+      // Remove the deleted item from open sections
+      setOpenSections(prev => {
+        const next = new Set<string>()
+        const deletedName = deleteTarget.name
+
+        if (deleteTarget.type === 'category') {
+          for (const key of prev) {
+            if (key !== deletedName && !key.startsWith(`${deletedName}||`)) {
+              next.add(key)
+            }
+          }
+        } else if (deleteTarget.type === 'fiscalYear') {
+          const category = deleteTarget.category
+          const deletedFyKey = `${category}||${deletedName}`
+          for (const key of prev) {
+            if (key !== deletedFyKey) {
+              next.add(key)
+            }
+          }
+        } else {
+          for (const key of prev) {
+            next.add(key)
+          }
+        }
+        return next
+      })
+
+      // Refresh documents from parent
+      if (onDocumentsChanged) {
+        onDocumentsChanged()
+      }
     } catch (error) {
       console.error('Error deleting:', error)
       alert('Failed to delete. Please try again.')

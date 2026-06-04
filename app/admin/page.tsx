@@ -39,6 +39,7 @@ export default function AdminPage() {
   const [documents, setDocuments] = useState<Document[]>([])
   const [loadingClients, setLoadingClients] = useState(true)
   const [loadingDocs, setLoadingDocs] = useState(false)
+  const [initialDocsLoaded, setInitialDocsLoaded] = useState(false)
 
   const [clientModal, setClientModal] = useState<ModalMode>(null)
   const [editingClient, setEditingClient] = useState<Client | null>(null)
@@ -70,8 +71,13 @@ export default function AdminPage() {
   useEffect(() => { loadClients(); loadCategories() }, [])
 
   useEffect(() => {
-    if (selectedClient) { loadDocuments(selectedClient.id) }
-    else { setDocuments([]) }
+    if (selectedClient) {
+      setInitialDocsLoaded(false)
+      loadDocuments(selectedClient.id)
+    } else {
+      setDocuments([])
+      setInitialDocsLoaded(false)
+    }
   }, [selectedClient])
 
   const authHeaders = () => {
@@ -165,6 +171,7 @@ export default function AdminPage() {
       if (!res.ok) throw new Error('Failed')
       const data = await res.json()
       setDocuments(data)
+      setInitialDocsLoaded(true)
     } catch (error) {
       showToast('Failed to load documents', 'error')
     } finally {
@@ -530,8 +537,8 @@ export default function AdminPage() {
             </header>
 
             {/* Document list */}
-            <div className="flex-1 overflow-y-auto p-8 min-h-0">
-              {loadingDocs ? (
+            <div className="flex-1 overflow-y-auto p-8 min-h-0 relative">
+              {!initialDocsLoaded && loadingDocs ? (
                 <div className="space-y-3">
                   {[0,1,2,3].map((i) => (
                     <div key={i} className="h-14 bg-white border-2 border-ink/5 rounded-none animate-pulse-soft" />
@@ -545,6 +552,7 @@ export default function AdminPage() {
                   onUpload={(preset) => { setEditingDoc(null); setUploadPreset(preset); setDocModal('create') }}
                   getAuthToken={getToken}
                   categoryConfig={categories}
+                  onDocumentsChanged={() => { if (selectedClient) loadDocuments(selectedClient.id) }}
                 />
               )}
             </div>
